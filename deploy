@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Absolute path to this script. /home/user/bin/foo.sh
+SCRIPT=$(readlink -f $0)
+# Absolute path this script is in. /home/user/bin
+SCRIPTPATH=`dirname $SCRIPT`
+
+localroot=`pwd`
+
+# check if in site root (one above http/)
+if [ ! -d "http" ]; then echo "Not site root."; 
+	exit 1;
+fi
+
+# load site configuration
+if [ ! -f ".deploy.cnf" ]; then echo "Missing .deploy.cnf."; exit;
+fi
+
+source .deploy.cnf
+
+echo "Remote host : $REMOTEHOST";
+
+if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
+fi
+
+if [ -d "http/typo3" ]; then echo "Looks like TYPO3 site"; 
+	ISTYPO3=TRUE; 
+	EXCLUDEFROM=$SCRIPTPATH/deploy-exclude-typo3.txt
+fi
+
+if [ -d "http/includes" ]; then echo "Looks like Drupal site";
+	ISDRUPAL=TRUE; 
+fi
+
+if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
+fi
+
+case "$1" in 
+
+	"up" )
+		echo "Uploading $2 ...";
+		rsync -a --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2		
+		;;
+	
+	"down" )
+		echo "Downloading $2 ...";
+		;;
+	
+	"diff" )
+		echo "Diffing $2 ...";
+		#echo -avn --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
+		rsync -avn --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
+		;;
+esac
+

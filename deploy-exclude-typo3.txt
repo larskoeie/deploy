@@ -1,0 +1,4 @@
+fileadmin/*
+typo3conf/*.log
+typo3temp/*
+uploads/*
