@@ -1,4 +1,5 @@
 fileadmin/*
 typo3conf/*.log
+typo3conf/database*.php
 typo3temp/*
 uploads/*
