@@ -52,7 +52,8 @@ case "$1" in
 		if [ -f $2 ] 
 		then
 			echo "is file";
-			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2
+			#diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[42m+/;s/^@/\x1b[34m@/;s/$/\x1b[0m/'
+			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		else
 			rsync -avn --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
 		fi

@@ -1,5 +1,7 @@
 fileadmin/*
 typo3conf/*.log
 typo3conf/database*.php
+typo3conf/ENABLE_INSTALL_TOOL
+typo3conf/temp_CACHED*.php
 typo3temp/*
 uploads/*
