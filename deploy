@@ -61,7 +61,8 @@ if [ -d "http/includes" ]; then echo "Looks like Drupal site";
 	ISDRUPAL=TRUE; 
 fi
 
-REMOTEPATH="$REMOTEHTTPFOLDER${2:4}"
+# substitute "http/" with the name of the http-folder on remote
+REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 echo $REMOTEPATH
 
 #if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
@@ -77,7 +78,7 @@ case "$1" in
 
 		if [ -f $2 ] 
 		then
-			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
 		if [ -d $2 ] 
 		then
