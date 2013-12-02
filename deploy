@@ -4,6 +4,7 @@
 SCRIPT=$(readlink -f $0)
 # Absolute path this script is in. /home/user/bin
 SCRIPTPATH=`dirname $SCRIPT`
+REMOTEHTTPFOLDER="http/"
 
 LOCALROOT=`pwd`
 
@@ -60,6 +61,9 @@ if [ -d "http/includes" ]; then echo "Looks like Drupal site";
 	ISDRUPAL=TRUE; 
 fi
 
+REMOTEPATH="$REMOTEHTTPFOLDER${2:4}"
+echo $REMOTEPATH
+
 #if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
 #fi
 
@@ -70,7 +74,6 @@ case "$1" in
 		fi
 
 		echo "Diffing $2 ...";
-		ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2";
 
 		if [ -f $2 ] 
 		then
@@ -84,8 +87,9 @@ case "$1" in
 		;;
 		
 	"diffdb" )
-		LOCAL="~/$LOCALSITENAME-local.sql"
-		REMOTE="~/$LOCALSITENAME-remote.sql"
+		LOCAL="/home/lars/$LOCALSITENAME-local.sql"
+		REMOTE="/home/lars/$LOCALSITENAME-remote.sql"
+		
 		if [ ! -f $LOCAL ] 
 			then echo "no local dump - use dumplocaldb"; exit;
 		fi
@@ -107,8 +111,7 @@ case "$1" in
 	"downdb" )
 		DUMPPATH="$LOCALSITENAME-remote.sql"
 		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
-		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 
-		
+		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
 		;;
 		
 	"dumplocaldb" )
@@ -120,9 +123,9 @@ case "$1" in
 	"dumpremotedb" )
 		DUMPPATH="$LOCALSITENAME-remote.sql"
 		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
-		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql ~/$DUMPPATH 
-		
+		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql ~/$DUMPPATH 		
 		;;	
+		
 	"up" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
 		fi
