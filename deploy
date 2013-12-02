@@ -39,6 +39,8 @@ fi
 source .deploy.cnf
 
 echo "Remote host : $REMOTEHOST";
+echo "Remote root : $REMOTEROOT";
+
 LOCALSITENAME=`basename $LOCALROOT`
 REMOTESITENAME=`basename $REMOTEROOT`
 TIME=`date +"%y%m%d"`
@@ -67,11 +69,15 @@ case "$1" in
 		fi
 
 		echo "Diffing $2 ...";
+		ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2";
+
 		if [ -f $2 ] 
 		then
 			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-		else
-			rsync -avn --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
+		fi
+		if [ -d $2 ] 
+		then
+			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
 		fi
 	
 		;;
@@ -97,6 +103,7 @@ case "$1" in
 		
 	"dumplocaldb" )
 		DUMPPATH="$LOCALSITENAME-local.sql"
+		echo "Dumping to $DUMPPATH ..."
 		mysqldump -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > ~/$DUMPPATH
 		;;
 		
