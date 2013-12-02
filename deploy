@@ -5,7 +5,28 @@ SCRIPT=$(readlink -f $0)
 # Absolute path this script is in. /home/user/bin
 SCRIPTPATH=`dirname $SCRIPT`
 
-localroot=`pwd`
+LOCALROOT=`pwd`
+
+if [ ! -n "$1" ]; then echo "usage: deploy <command> path
+commands :
+  diff
+  	Show files and folders in specified path on local that are not on remote or have different size or timestamp
+  up
+  	Upload the specified path from local to remote using rsync
+  dbup
+  	
+  down
+  	Download the specified path from remote to local using rsync
+  dbdiff
+  dbdown
+	dumplocaldb
+		Dump the local db to file
+	dumpremotedb
+		Dump the remote db to file
+		  
+";
+	exit 1;
+fi
 
 # check if in site root (one above http/)
 if [ ! -d "http" ]; then echo "Not site root."; 
@@ -15,13 +36,17 @@ fi
 # load site configuration
 if [ ! -f ".deploy.cnf" ]; then echo "Missing .deploy.cnf."; exit;
 fi
-
 source .deploy.cnf
 
 echo "Remote host : $REMOTEHOST";
+LOCALSITENAME=`basename $LOCALROOT`
+REMOTESITENAME=`basename $REMOTEROOT`
+TIME=`date +"%y%m%d"`
 
 if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
 fi
+
+EXCLUDEFROM=$SCRIPTPATH/deploy-exclude.txt
 
 if [ -d "http/typo3" ]; then echo "Looks like TYPO3 site"; 
 	ISTYPO3=TRUE; 
@@ -32,31 +57,62 @@ if [ -d "http/includes" ]; then echo "Looks like Drupal site";
 	ISDRUPAL=TRUE; 
 fi
 
-if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
-fi
+#if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
+#fi
 
 case "$1" in 
-
-	"up" )
-		echo "Uploading $2 ...";
-		rsync -a --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2		
-		;;
-	
-	"down" )
-		echo "Downloading $2 ...";
-		;;
-	
+		
 	"diff" )
+		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		fi
+
 		echo "Diffing $2 ...";
-		#echo -avn --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
 		if [ -f $2 ] 
 		then
-			echo "is file";
-			#diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[42m+/;s/^@/\x1b[34m@/;s/$/\x1b[0m/'
 			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		else
 			rsync -avn --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
 		fi
+	
 		;;
+		
+	"diffdb" )
+		
+		;;
+		
+	"down" )
+		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		fi
+
+		echo "Downloading $2 ...";
+		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2 $2 
+		;;
+
+	"downdb" )
+		DUMPPATH="$LOCALSITENAME-remote.sql"
+		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
+		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 
+		
+		;;
+		
+	"dumplocaldb" )
+		DUMPPATH="$LOCALSITENAME-local.sql"
+		mysqldump -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > ~/$DUMPPATH
+		;;
+		
+	"dumpremotedb" )
+		DUMPPATH="$LOCALSITENAME-remote.sql"
+		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
+		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql ~/$DUMPPATH 
+		
+		;;	
+	"up" )
+		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		fi
+
+		echo "Uploading $2 ...";
+		rsync -a --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2		
+		;;
+
 esac
 

@@ -1,4 +1,8 @@
+index.php
 fileadmin/*
+t3lib/*
+typo3/*
+typo3_src/*
 typo3conf/*.log
 typo3conf/database*.php
 typo3conf/ENABLE_INSTALL_TOOL
