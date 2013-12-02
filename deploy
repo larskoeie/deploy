@@ -44,6 +44,7 @@ echo "Remote root : $REMOTEROOT";
 LOCALSITENAME=`basename $LOCALROOT`
 REMOTESITENAME=`basename $REMOTEROOT`
 TIME=`date +"%y%m%d"`
+DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 
 if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
 fi
@@ -83,7 +84,16 @@ case "$1" in
 		;;
 		
 	"diffdb" )
+		LOCAL="~/$LOCALSITENAME-local.sql"
+		REMOTE="~/$LOCALSITENAME-remote.sql"
+		if [ -f $LOCAL ] 
+			then echo "no local dump - use dumplocaldb"; exit;
+		fi
+		if [ -f $REMOTE ] 
+			then echo "no remote dump - use dumpremotedb"; exit;
+		fi
 		
+		diff $LOCAL $REMOTE | sed $DIFFCOLORSED
 		;;
 		
 	"down" )
