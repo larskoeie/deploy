@@ -82,7 +82,7 @@ case "$1" in
 		fi
 		if [ -d $2 ] 
 		then
-			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2
+			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
 		fi
 	
 		;;
@@ -106,7 +106,7 @@ case "$1" in
 		fi
 
 		echo "Downloading $2 ...";
-		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2 $2 
+		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $2 
 		;;
 
 	"downdb" )
@@ -132,7 +132,7 @@ case "$1" in
 		fi
 
 		echo "Uploading $2 ...";
-		rsync -a --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$2		
+		rsync -a --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
 		;;
 
 esac
