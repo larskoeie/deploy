@@ -86,10 +86,10 @@ case "$1" in
 	"diffdb" )
 		LOCAL="~/$LOCALSITENAME-local.sql"
 		REMOTE="~/$LOCALSITENAME-remote.sql"
-		if [ -f $LOCAL ] 
+		if [ ! -f $LOCAL ] 
 			then echo "no local dump - use dumplocaldb"; exit;
 		fi
-		if [ -f $REMOTE ] 
+		if [ ! -f $REMOTE ] 
 			then echo "no remote dump - use dumpremotedb"; exit;
 		fi
 		
