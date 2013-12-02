@@ -78,7 +78,7 @@ case "$1" in
 
 		if [ -f $2 ] 
 		then
-			diff -w -u <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+			diff -w -u --include=*.* <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
 		if [ -d $2 ] 
 		then
