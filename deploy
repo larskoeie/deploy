@@ -78,11 +78,23 @@ case "$1" in
 
 		if [ -f $2 ] 
 		then
-			diff -w -u --include=*.* <(ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH") $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+			echo "Single file diff"
+echo $REMOTEUSER@$REMOTEHOST
+REMOTEDATA=`ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH"`
+echo "remotedata :"
+echo $REMOTEDATA
+
+              
+			diff -w -u <($REMOTEDATA) $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
 		if [ -d $2 ] 
 		then
-			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+			echo "Changed files :"
+			for file in `rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs`; do 
+				if [ -f ${2%/}/$file ]; then echo ${2%/}/$file;  
+				fi; 
+			done;
+
 		fi
 	
 		;;
