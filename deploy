@@ -70,7 +70,6 @@ case "$1" in
 		fi
 
 		echo "Diffing $2 ...";
-		ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$2";
 
 		if [ -f $2 ] 
 		then
@@ -84,12 +83,12 @@ case "$1" in
 		;;
 		
 	"diffdb" )
-		LOCAL="~/$LOCALSITENAME-local.sql"
-		REMOTE="~/$LOCALSITENAME-remote.sql"
-		if [ -f $LOCAL ] 
+		LOCAL="/home/lars/$LOCALSITENAME-local.sql"
+		REMOTE="/home/lars/$LOCALSITENAME-remote.sql"
+		if [ ! -f $LOCAL ] 
 			then echo "no local dump - use dumplocaldb"; exit;
 		fi
-		if [ -f $REMOTE ] 
+		if [ ! -f $REMOTE ] 
 			then echo "no remote dump - use dumpremotedb"; exit;
 		fi
 		
