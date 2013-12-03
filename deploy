@@ -40,19 +40,20 @@ if [ ! -f ".deploy.cnf" ]; then echo "Missing .deploy.cnf."; exit;
 fi
 source .deploy.cnf
 
-echo "Remote host : $REMOTEHOST";
-echo "Remote root : $REMOTEROOT";
+# basic check of configuration
+if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
+fi
 
+# some var initialization
 LOCALSITENAME=`basename $LOCALROOT`
 REMOTESITENAME=`basename $REMOTEROOT`
 TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 
-if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
-fi
 
 EXCLUDEFROM=$SCRIPTPATH/deploy-exclude.txt
 
+# try to recognize certain applications
 if [ -d "http/typo3" ]; then echo "Looks like TYPO3 site"; 
 	ISTYPO3=TRUE; 
 	EXCLUDEFROM=$SCRIPTPATH/deploy-exclude-typo3.txt
@@ -64,7 +65,6 @@ fi
 
 # substitute "http/" with the name of the http-folder on remote
 REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
-echo $REMOTEPATH
 
 #if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
 #fi
@@ -79,7 +79,7 @@ case "$1" in
 
 		if [ -f $2 ] 
 		then
-			echo "Single file diff"
+			echo "Blue lines are added on local - red are removed"
 			# do an actual diff on two files
 			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$2" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
@@ -89,7 +89,7 @@ case "$1" in
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
 			for file in `rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs`; do 
-				if [ -f ${2%/}/$file ]; then echo ${2%/}/$file;  
+				if [ -f ${2%/}/$file ]; then ls -l ${2%/}/$file;  
 				fi; 
 			done;
 
