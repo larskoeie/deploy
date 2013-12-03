@@ -22,9 +22,9 @@ commands :
   downdb
   	Dump remote db to file, download file and import to local db
 	dumplocaldb
-		Dump the local db to file
+		Dump the local db to local file
 	dumpremotedb
-		Dump the remote db to file
+		Dump the remote db to local file
 		  
 ";
 	exit 1;
@@ -68,6 +68,7 @@ REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 
 #if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
 #fi
+
 
 case "$1" in 
 		
@@ -114,6 +115,20 @@ case "$1" in
 		
 	"down" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		fi
+
+		# check if "http/" is owned by the current user. If not, downloading files, will probably cause trouble. Confirm.
+		HTTPOWNER=$(stat -c %U http)
+		if [ $HTTPOWNER != $(id -u -n) ]; then 
+			echo "Warning: you are not $HTTPOWNER. Continue? y/n";
+			prompt=""
+			read -p "$prompt" -r -s -n 1 char
+	    if [[ $char != "y" ]]
+	    then
+	    	echo;
+        exit;
+	    fi
+
 		fi
 
 		echo "Downloading $2 ...";
