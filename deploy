@@ -14,12 +14,13 @@ commands :
   	Show files and folders in specified path on local that are not on remote or have different size or timestamp
   up
   	Upload the specified path from local to remote using rsync
-  dbup
   	
   down
   	Download the specified path from remote to local using rsync
-  dbdiff
-  dbdown
+  diffdb
+  
+  downdb
+  	Dump remote db to file, download file and import to local db
 	dumplocaldb
 		Dump the local db to file
 	dumpremotedb
@@ -79,17 +80,14 @@ case "$1" in
 		if [ -f $2 ] 
 		then
 			echo "Single file diff"
-echo $REMOTEUSER@$REMOTEHOST
-REMOTEDATA=`ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH"`
-echo "remotedata :"
-echo $REMOTEDATA
-
-              
-			diff -w -u <($REMOTEDATA) $2 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+			# do an actual diff on two files
+			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$2" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
 		if [ -d $2 ] 
 		then
 			echo "Changed files :"
+			# diff structures using rsync and iterate result outputting only actual file names
+			# skip directories and other stuff 
 			for file in `rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs`; do 
 				if [ -f ${2%/}/$file ]; then echo ${2%/}/$file;  
 				fi; 
@@ -100,6 +98,7 @@ echo $REMOTEDATA
 		;;
 		
 	"diffdb" )
+		# do a diff on the two db-dump files
 		LOCAL="/home/lars/$LOCALSITENAME-local.sql"
 		REMOTE="/home/lars/$LOCALSITENAME-remote.sql"
 		
@@ -118,12 +117,15 @@ echo $REMOTEDATA
 		fi
 
 		echo "Downloading $2 ...";
+		# download structure or single file using rsync
 		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $2 
 		;;
 
 	"downdb" )
 		DUMPPATH="$LOCALSITENAME-remote.sql"
+		# dump remote db
 		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
+		# download result
 		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
 		;;
 		
