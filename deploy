@@ -71,7 +71,10 @@ REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 
 
 case "$1" in 
-		
+	"createtypo3adminuser" )
+		echo "insert into be_users (username, password, admin) values ('lars', 'd4c62bf67470c2b26a8d31b6feeb0caf', 1);" > temp.sql
+		mysql -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB < temp.sql
+		;;		
 	"diff" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
 		fi
@@ -120,7 +123,7 @@ case "$1" in
 		# check if "http/" is owned by the current user. If not, downloading files, will probably cause trouble. Confirm.
 		HTTPOWNER=$(stat -c %U http)
 		if [ $HTTPOWNER != $(id -u -n) ]; then 
-			echo "Warning: you are not $HTTPOWNER. Continue? y/n";
+			echo "You are not $HTTPOWNER. Continue? y/n";
 			prompt=""
 			read -p "$prompt" -r -s -n 1 char
 	    if [[ $char != "y" ]]
