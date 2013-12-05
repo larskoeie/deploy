@@ -71,9 +71,22 @@ REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 
 
 case "$1" in 
-	"createtypo3adminuser" )
-		echo "insert into be_users (username, password, admin) values ('lars', 'd4c62bf67470c2b26a8d31b6feeb0caf', 1);" > temp.sql
-		mysql -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB < temp.sql
+	"user-create" )
+		if [ ISTYPO3 ]; then				
+			username=$2
+			if [ ! -n "$username" ]; then echo "Usage : deploy user-create <username>"; exit 1;
+			fi
+			# password is "password"
+			# tested on TYPO3 4.7
+			echo "insert into be_users (username, password, admin) values ('$username', '5f4dcc3b5aa765d61d8327deb882cf99', 1);" > deploy-temp.sql
+			# different salting - should work on TYPO3 6.1 - not tested
+			# echo "insert into be_users (username, password, admin) values ('admin', '', 1);" > temp.sql
+			
+		fi
+		if [ -f deploy-temp.sql ]; then
+			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB < deploy-temp.sql
+			echo "User '$username' created with password 'password' - please change password immediately."
+		fi
 		;;		
 	"diff" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
@@ -103,8 +116,8 @@ case "$1" in
 		
 	"diffdb" )
 		# do a diff on the two db-dump files
-		LOCAL="/home/lars/$LOCALSITENAME-local.sql"
-		REMOTE="/home/lars/$LOCALSITENAME-remote.sql"
+		LOCAL="$LOCALSITENAME-local.sql"
+		REMOTE="$LOCALSITENAME-remote.sql"
 		
 		if [ ! -f $LOCAL ] 
 			then echo "no local dump - use dumplocaldb"; exit;
@@ -148,15 +161,26 @@ case "$1" in
 		;;
 		
 	"dumplocaldb" )
+		# this dump is specifically with diff in mind
+		if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1; 
+		fi
 		DUMPPATH="$LOCALSITENAME-local.sql"
+		ignoretables=""
+		# determine ignore-tables - this is based on type of system
+		if [ ISTYPO3 ]; then
+			ignoretables=`mysql -DN $LOCALDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}'`
+		fi
 		echo "Dumping to $DUMPPATH ..."
-		mysqldump -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > ~/$DUMPPATH
+		# --skip-extended-insert makes dump larger, but provides better results with diff later on
+		mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
 		;;
 		
 	"dumpremotedb" )
+		if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1; 
+		fi
 		DUMPPATH="$LOCALSITENAME-remote.sql"
-		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
-		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql ~/$DUMPPATH 		
+		ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
+		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
 		;;	
 		
 	"up" )
@@ -169,3 +193,6 @@ case "$1" in
 
 esac
 
+if [ -f deploy-temp.sql ]; then rm deploy-temp.sql; 
+fi
+		
