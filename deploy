@@ -142,7 +142,7 @@ case "$1" in
 	    if [[ $char != "y" ]]
 	    then
 	    	echo;
-        exit;
+        exit;0
 	    fi
 
 		fi
@@ -179,6 +179,11 @@ case "$1" in
 		if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1; 
 		fi
 		DUMPPATH="$LOCALSITENAME-remote.sql"
+		ignoretables=""
+		# determine ignore-tables - this is based on type of system
+		if [ ISTYPO3 ]; then
+			ignoretables=`ssh $REMOTEUSER@$REMOTEHOST 'mysql -DN $LOCALDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}''`
+		fi
 		ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
 		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
 		;;	
@@ -188,9 +193,26 @@ case "$1" in
 		fi
 
 		echo "Uploading $2 ...";
-		rsync -a --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
+		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
 		;;
 
+	# create tar with folder
+	"dumplocal" )		
+		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
+		fi
+
+		DUMPPATH=`sed "$LOCALSITENAME-remote.sql"`
+		
+		tar -pcvfz $LOCALSITENAME-local.tar $2
+		;;
+	
+	"dumpremote" )
+		ssh $REMOTEUSER@$REMOTEHOST "tar -pcvfz ~/$LOCALSITENAME-local.tar.gz $2"
+		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
+		
+		
+		;;
+		
 esac
 
 if [ -f deploy-temp.sql ]; then rm deploy-temp.sql; 
