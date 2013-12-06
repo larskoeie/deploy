@@ -106,7 +106,10 @@ case "$1" in
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
 			for file in `rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs`; do 
-				if [ -f ${2%/}/$file ]; then ls -l ${2%/}/$file;  
+				if [ -f ${2%/}/$file ]; then 
+					ls -l ${2%/}/$file;  
+				else
+					echo $file;
 				fi; 
 			done;
 
@@ -201,9 +204,10 @@ case "$1" in
 		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
 		fi
 
-		DUMPPATH=`sed "$LOCALSITENAME-remote.sql"`
+		DUMPPATH=`echo $LOCALSITENAME-local-$2 | sed 's/\//-/g'`
+		echo $DUMPPATH
 		
-		tar -pcvfz $LOCALSITENAME-local.tar $2
+		tar -cvfz $DUMPPATH.tar.gz $2
 		;;
 	
 	"dumpremote" )
