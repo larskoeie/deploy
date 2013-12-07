@@ -105,14 +105,8 @@ case "$1" in
 			echo "Changed files :"
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
-			for file in `rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs`; do 
-				if [ -f ${2%/}/$file ]; then 
-					ls -l ${2%/}/$file;  
-				else
-					echo $file;
-				fi; 
-			done;
-
+			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+			
 		fi
 	
 		;;
@@ -132,6 +126,31 @@ case "$1" in
 		diff $LOCAL $REMOTE | sed $DIFFCOLORSED
 		;;
 		
+	# diff and grep for text within diff result
+	"diffsearch" )
+		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
+		fi
+		if [ ! -n "$3" ]; then echo "Missing search string"; exit 1; 
+		fi
+
+		echo "Diffing '$2' and searching for '$3' ...";
+
+		if [ -f $2 ] 
+		then
+			echo "Blue lines are added on local - red are removed"
+			# do an actual diff on two files
+			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$2" | grep $3 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+		fi
+		if [ -d $2 ] 
+		then
+			echo "Changed files :"
+			# diff structures using rsync and iterate result outputting only actual file names
+			# skip directories and other stuff 
+			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3
+			
+		fi
+	
+		;;
 	"down" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
 		fi
