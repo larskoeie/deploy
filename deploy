@@ -12,19 +12,18 @@ if [ ! -n "$1" ]; then echo "usage: deploy <command> path
 commands :
   diff
   	Show files and folders in specified path on local that are not on remote or have different size or timestamp
-  up
-  	Upload the specified path from local to remote using rsync
   	
-  down
-  	Download the specified path from remote to local using rsync
   diffdb
   
-  downdb
-  	Dump remote db to file, download file and import to local db
+  down
+  	Download the specified path from remote to local using rsync
+
 	dumplocaldb
 		Dump the local db to local file
 	dumpremotedb
 		Dump the remote db to local file
+  up
+  	Upload the specified path from local to remote using rsync
 		  
 ";
 	exit 1;
@@ -53,12 +52,6 @@ DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 
 EXCLUDEFROM=$SCRIPTPATH/deploy-exclude.txt
 
-# try to recognize certain applications
-if [ -d "http/typo3" ]; then echo "Looks like TYPO3 site"; 
-	ISTYPO3=TRUE; 
-	EXCLUDEFROM=$SCRIPTPATH/deploy-exclude-typo3.txt
-fi
-
 if [ -d "http/includes" ]; then echo "Looks like Drupal site";
 	ISDRUPAL=TRUE; 
 fi
@@ -69,25 +62,15 @@ REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 #if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
 #fi
 
+source deploy-typo3
+
+if [ $handled -eq 1 ]; then
+	exit 0;
+fi
+
+echo "command : $1"
 
 case "$1" in 
-	"user-create" )
-		if [ ISTYPO3 ]; then				
-			username=$2
-			if [ ! -n "$username" ]; then echo "Usage : deploy user-create <username>"; exit 1;
-			fi
-			# password is "password"
-			# tested on TYPO3 4.7
-			echo "insert into be_users (username, password, admin) values ('$username', '5f4dcc3b5aa765d61d8327deb882cf99', 1);" > deploy-temp.sql
-			# different salting - should work on TYPO3 6.1 - not tested
-			# echo "insert into be_users (username, password, admin) values ('admin', '', 1);" > temp.sql
-			
-		fi
-		if [ -f deploy-temp.sql ]; then
-			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB < deploy-temp.sql
-			echo "User '$username' created with password 'password' - please change password immediately."
-		fi
-		;;		
 	"diff" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
 		fi
@@ -109,7 +92,7 @@ case "$1" in
 			for l in $diff 
 			do
 #				if [ ! -f $2$l ] && [ ! -d $2$l ]; then
-					echo -n "$l "
+					echo "$l "
 #				fi
 			done
 			echo
