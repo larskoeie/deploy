@@ -88,23 +88,25 @@ case "$1" in
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
 			echo "rsync output :"
-			diff=`rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs -0`
-			for l in $diff 
-			do
+			rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+			
+#			diff=`rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs -0`
+#			for l in $diff 
+#			do
 #				if [ ! -f $2$l ] && [ ! -d $2$l ]; then
-					echo "$l "
+#					echo -n "$l "
 #				fi
-			done
-			echo
-			echo "Changed files :"
-			echo "---"
-			for l in $diff 
-			do
-				if [ -f $2$l ]; then
-					ls -l $2$l
-				fi
-			done
-			echo	
+#			done
+#			echo
+#			echo "Changed files :"
+#			echo "---"
+#			for l in $diff 
+#			do
+#				if [ -f $2$l ]; then
+#					ls -l $2$l
+#				fi
+#			done
+#			echo	
 		fi
 		
 		;;
