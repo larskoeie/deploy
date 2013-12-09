@@ -102,13 +102,28 @@ case "$1" in
 		fi
 		if [ -d $2 ] 
 		then
-			echo "Changed files :"
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
-			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
-			
+			echo "rsync output :"
+			diff=`rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs -0`
+			for l in $diff 
+			do
+#				if [ ! -f $2$l ] && [ ! -d $2$l ]; then
+					echo -n "$l "
+#				fi
+			done
+			echo
+			echo "Changed files :"
+			echo "---"
+			for l in $diff 
+			do
+				if [ -f $2$l ]; then
+					ls -l $2$l
+				fi
+			done
+			echo	
 		fi
-	
+		
 		;;
 		
 	"diffdb" )
