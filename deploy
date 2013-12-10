@@ -63,10 +63,9 @@ REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 #fi
 
 #source deploy-typo3
-
-if [ $handled -eq 1 ]; then
-	exit 0;
-fi
+#if [ $handled -eq 1 ]; then
+#	exit 0;
+#fi
 
 echo "command : $1"
 
@@ -85,9 +84,8 @@ case "$1" in
 		fi
 		if [ -d $2 ] 
 		then
-			# diff structures using rsync and iterate result outputting only actual file names
-			# skip directories and other stuff 
-			echo "rsync output - blue lines are changed or added on local."
+			# diff structures using rsync
+			echo "Blue lines are changed or added on local."
 			rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
 			
 		fi
@@ -198,6 +196,7 @@ case "$1" in
 		fi
 
 		echo "Uploading $2 ...";
+		echo "rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH	"
 		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
 		;;
 
