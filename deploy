@@ -48,9 +48,7 @@ LOCALSITENAME=`basename $LOCALROOT`
 REMOTESITENAME=`basename $REMOTEROOT`
 TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-
-
-EXCLUDEFROM=$SCRIPTPATH/deploy-exclude.txt
+EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 
 if [ -d "http/includes" ]; then echo "Looks like Drupal site";
 	ISDRUPAL=TRUE; 
@@ -86,7 +84,7 @@ case "$1" in
 		then
 			# diff structures using rsync
 			echo "Blue lines are changed or added on local."
-			rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
+			rsync -avnci $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
 			
 		fi
 		
@@ -127,7 +125,7 @@ case "$1" in
 			echo "Changed files :"
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
-			rsync -avnc --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3
+			rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3
 			
 		fi
 	
@@ -152,7 +150,7 @@ case "$1" in
 
 		echo "Downloading $2 ...";
 		# download structure or single file using rsync
-		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $2 
+		rsync -av $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $2 
 		;;
 
 	"downdb" )
@@ -196,8 +194,7 @@ case "$1" in
 		fi
 
 		echo "Uploading $2 ...";
-		echo "rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH	"
-		rsync -av --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
+		rsync -avci $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
 		;;
 
 	# create tar with folder
