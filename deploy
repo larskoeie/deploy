@@ -62,7 +62,7 @@ REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 #if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
 #fi
 
-source deploy-typo3
+#source deploy-typo3
 
 if [ $handled -eq 1 ]; then
 	exit 0;
@@ -72,7 +72,7 @@ echo "command : $1"
 
 case "$1" in 
 	"diff" )
-		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
 		fi
 
 		echo "Diffing $2 ...";
@@ -87,26 +87,9 @@ case "$1" in
 		then
 			# diff structures using rsync and iterate result outputting only actual file names
 			# skip directories and other stuff 
-			echo "rsync output :"
-			rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+			echo "rsync output - blue lines are changed or added on local."
+			rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
 			
-#			diff=`rsync -avnci --exclude-from $SCRIPTPATH/deploy-exclude.txt --exclude-from $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | xargs -0`
-#			for l in $diff 
-#			do
-#				if [ ! -f $2$l ] && [ ! -d $2$l ]; then
-#					echo -n "$l "
-#				fi
-#			done
-#			echo
-#			echo "Changed files :"
-#			echo "---"
-#			for l in $diff 
-#			do
-#				if [ -f $2$l ]; then
-#					ls -l $2$l
-#				fi
-#			done
-#			echo	
 		fi
 		
 		;;
