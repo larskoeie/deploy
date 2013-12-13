@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# after
+after () {
+	local_clear_cache
+}
+
+local_clear_cache() {
+	echo "Clearing cache ..."
+	
+	# version 4.7 and backwards
+	rm http/typo3conf/temp_CACHED*
+	
+	# version 6.0 and onwards
+	rm -rf http/typo3temp/{cache_core,cache_phpcode,fluid_template,class_cache}	
+}
+
+
+# try to recognize TYPO3 - there might be better ways
+ISTYPO3=0; 
+if [ -d "http/typo3" ]; then 
+	ISTYPO3=1; 
+	EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude-typo3.txt"
+fi
+
+if [ $ISTYPO3 -eq 1 ]; then
+	php_cwd=`/usr/bin/php << 'EOF'
+<?php 
+		# we grab the version from sysext cms
+		$_EXTKEY = 'cms';
+		include(getcwd() . '/http/typo3/sysext/' . $_EXTKEY . '/ext_emconf.php'); 
+		$t3_version = $EM_CONF['cms']['version'];
+	
+		# grab localconf
+		$conffile = getcwd() . '/http/typo3conf/localconf.php';
+		if (is_file($conffile)) {
+			# 4.7 and backwards
+			include($conffile); 
+			$db_host = $typo_db_host;
+			$db_username = $typo_db_username;
+			$db_password = $typo_db_password;
+			$db_db = $typo_db;	
+		} else {
+			# 6.0 and onwards
+			$conffile = getcwd() . '/http/typo3conf/LocalConfiguration.php';
+			if (is_file($conffile)) {
+				$c= (include($conffile)); 
+				$db_host = $c['DB']['host'];
+				$db_username = $c['DB']['username'];
+				$db_password = $c['DB']['password'];
+				$db_db = $c['DB']['database'];	
+			}
+		
+		}	
+		echo implode(";", array(
+			$t3_version,
+			$db_host,
+			$db_username,
+			$db_password,
+			$db_db,
+		));
+	?>
+EOF`
+	
+	CONFIG=$php_cwd
+	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
+	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
+	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
+	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
+	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+fi
+	
+case "$1" in 
+	"cc" )
+		local_clear_cache
+		;;
+		
+	"make" )	
+		VERSION="6.1.7"
+		cd .deploy
+		wget "http://prdownloads.sourceforge.net/typo3/typo3_src-$VERSION.tar.gz"
+		cd ../http		
+		tar -zxvf ../.deploy/typo3_src-$VERSION.tar.gz
+		ln -s typo3_src-$VERSION.tar.gz typo3_src
+		ln -s typo3_src/typo3 typo3
+		ln -s typo3_src/t3lib t3lib
+		ln -s typo3_src/index.php index.php
+		if [ ! -d typo3conf ]; then mkdir typo3conf 
+		fi
+		if [ ! -d typo3temp ]; then mkdir typo3temp 
+		fi				
+		echo "Done."
+		;;
+		
+	"user-create" )
+		if [ ISTYPO3 ]; then				
+			username=$2
+			if [ ! -n "$username" ]; then echo "Usage : deploy user-create <username>"; exit 1;
+			fi
+			# password is "password"
+			# tested on TYPO3 4.7
+			echo "insert into be_users (username, password, admin) values ('$username', '5f4dcc3b5aa765d61d8327deb882cf99', 1);" > deploy-temp.sql
+			# different salting - should work on TYPO3 6.1 - not tested
+			# echo "insert into be_users (username, password, admin) values ('admin', '', 1);" > temp.sql
+			handled=1;
+			
+		fi
+		if [ -f deploy-temp.sql ]; then
+			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+			echo "User '$username' created with password 'password' - please change password immediately."
+		fi
+		;;		
+
+
+esac
+
+

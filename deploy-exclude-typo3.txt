@@ -1,5 +1,4 @@
-index.php
-fileadmin/*
+fileadmin
 t3lib/*
 typo3/*
 typo3_src/*

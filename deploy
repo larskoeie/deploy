@@ -1,5 +1,13 @@
 #!/bin/bash
 
+#
+#
+#
+# - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
+#
+#
+#
+
 # Absolute path to this script. /home/user/bin/foo.sh
 SCRIPT=$(readlink -f $0)
 # Absolute path this script is in. /home/user/bin
@@ -18,6 +26,8 @@ commands :
   down
   	Download the specified path from remote to local using rsync
 
+	downdb
+		Dump remote db to file, download file and import into local db.		
 	dumplocaldb
 		Dump the local db to local file
 	dumpremotedb
@@ -38,6 +48,9 @@ fi
 if [ ! -f ".deploy.cnf" ]; then echo "Missing .deploy.cnf."; exit;
 fi
 source .deploy.cnf
+# unset passwords
+LOCALDBPASSWORD=""
+REMOTEDBPASSWORD=""
 
 # basic check of configuration
 if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
@@ -50,26 +63,42 @@ TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 
-if [ -d "http/includes" ]; then echo "Looks like Drupal site";
-	ISDRUPAL=TRUE; 
-fi
-
 # substitute "http/" with the name of the http-folder on remote
 REMOTEPATH="$REMOTEHTTPFOLDER${2:5}"
 
-#if [ ! $ISTYPO3 ] && [ ! $ISDRUPAL ]; then exit 1;
-#fi
+# if path on local is a directory, make sure it has a trailing slash, on local AND on remote
+LOCALPATH=$2
+if [ -d "$LOCALPATH" ]; then 
+	LOCALPATH="${LOCALPATH%/}/"
+	REMOTEPATH="${REMOTEPATH%/}/"
+fi
 
-#source deploy-typo3
+
+if [ -d "http/includes" ]; then echo "Looks like Drupal 7 site";
+	ISDRUPAL=TRUE; 
+	ISDRUPAL7=TRUE;           
+	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal7.txt"
+	source deploy-drupal7
+fi
+
+if [ -d "http/core/includes" ]; then echo "Looks like Drupal 8 site";
+	ISDRUPAL=TRUE;          
+	ISDRUPAL8=TRUE;  
+	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal8.txt"
+fi
+
+source deploy-typo3
+
 #if [ $handled -eq 1 ]; then
 #	exit 0;
 #fi
 
-echo "command : $1"
-
 case "$1" in 
+	"config" )
+		cat .deploy.cnf
+		;;
 	"diff" )
-		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
+		if [ ! -n "$2" ]; then echo "Usage: deploy diff <path>"; exit 1; 
 		fi
 
 		echo "Diffing $2 ...";
@@ -84,7 +113,7 @@ case "$1" in
 		then
 			# diff structures using rsync
 			echo "Blue lines are changed or added on local."
-			rsync -avnci $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
+			rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
 			
 		fi
 		
@@ -148,9 +177,9 @@ case "$1" in
 
 		fi
 
-		echo "Downloading $2 ...";
+		echo "Downloading $LOCALPATH ...";
 		# download structure or single file using rsync
-		rsync -av $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $2 
+		rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH 
 		;;
 
 	"downdb" )
@@ -159,6 +188,8 @@ case "$1" in
 		ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
 		# download result
 		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
+		# import
+		mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < ./$DUMPPATH
 		;;
 		
 	"dumplocaldb" )
@@ -166,11 +197,11 @@ case "$1" in
 		if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1; 
 		fi
 		DUMPPATH="$LOCALSITENAME-local.sql"
-		ignoretables=""
+		#ignoretables=""
 		# determine ignore-tables - this is based on type of system
-		if [ ISTYPO3 ]; then
-			ignoretables=`mysql -DN $LOCALDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}'`
-		fi
+		#if [ ISTYPO3 ]; then
+		#	ignoretables=`mysql -DN $LOCALDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}'`
+		#fi
 		echo "Dumping to $DUMPPATH ..."
 		# --skip-extended-insert makes dump larger, but provides better results with diff later on
 		mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
@@ -182,19 +213,24 @@ case "$1" in
 		DUMPPATH="$LOCALSITENAME-remote.sql"
 		ignoretables=""
 		# determine ignore-tables - this is based on type of system
-		if [ ISTYPO3 ]; then
-			ignoretables=`ssh $REMOTEUSER@$REMOTEHOST 'mysql -DN $LOCALDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}''`
-		fi
+		#if [ ISTYPO3 ]; then
+		#	ignoretables=`ssh $REMOTEUSER@$REMOTEHOST 'mysql -DN $REMOTEDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}''`
+		#fi
 		ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
 		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
 		;;	
 		
+	"sqlq" )
+		echo $2 > deploy-temp.sql;
+		mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+		
+		;;
 	"up" )
 		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
 		fi
 
 		echo "Uploading $2 ...";
-		rsync -avci $EXCLUDEFROM $2 $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
+		rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
 		;;
 
 	# create tar with folder

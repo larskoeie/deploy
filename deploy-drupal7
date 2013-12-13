@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# after
+after () {
+	local_clear_cache
+}
+
+local_clear_cache() {
+	echo "Clearing cache ..."
+	
+}
+
+php_cwd=`/usr/bin/php << 'EOF'
+<?php 
+		
+	# grab localconf
+	$conffile = getcwd() . '/http/sites/default/settings.php';
+	echo $conffile;
+	if (is_file($conffile)) {
+		include($conffile); 
+		if (is_array($databases['default']['default'])) {
+			$db = $databases['default']['default'];
+			$db_host = $db['host'];
+			$db_username = $db['username'];
+			$db_password = $db['password'];
+			$db_db = $db['database'];	
+		}
+	}
+		
+	echo implode(";", array(
+		'',
+		$db_host,
+		$db_username,
+		$db_password,
+		$db_db,
+	));
+?>
+EOF`
+
+CONFIG=$php_cwd
+LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
+LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
+LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
+LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
+LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+
+case "$1" in 
+	"cc" )
+		local_clear_cache
+		;;
+	"user-create" )
+		;;		
+
+
+esac
+
+
