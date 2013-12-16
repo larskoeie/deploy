@@ -20,11 +20,11 @@ local_clear_cache() {
 ISTYPO3=0; 
 if [ -d "http/typo3" ]; then 
 	ISTYPO3=1; 
-	EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude-typo3.txt"
+	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-typo3.txt"
 fi
 
 if [ $ISTYPO3 -eq 1 ]; then
-	php_cwd=`/usr/bin/php << 'EOF'
+	php_code=<<<`the_secret_delimiter`;
 <?php 
 		# we grab the version from sysext cms
 		$_EXTKEY = 'cms';
@@ -60,7 +60,9 @@ if [ $ISTYPO3 -eq 1 ]; then
 			$db_db,
 		));
 	?>
-EOF`
+the_secret_delimiter
+	echo 123$php_code
+	#php_cwd=`/usr/bin/php 
 	
 	CONFIG=$php_cwd
 	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
@@ -69,6 +71,10 @@ EOF`
 	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
 	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
 fi
+	
+	echo $LOCALDBHOST
+	handled=1
+	exit 0
 	
 case "$1" in 
 	"cc" )

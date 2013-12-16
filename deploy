@@ -89,27 +89,27 @@ fi
 
 source deploy-typo3
 
-#if [ $handled -eq 1 ]; then
-#	exit 0;
-#fi
+if [ $handled -eq 1 ]; then
+	exit 0;
+fi
 
 case "$1" in 
 	"config" )
 		cat .deploy.cnf
 		;;
 	"diff" )
-		if [ ! -n "$2" ]; then echo "Usage: deploy diff <path>"; exit 1; 
+		if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
 		fi
 
-		echo "Diffing $2 ...";
+		echo "Diffing $LOCALPATH ...";
 
-		if [ -f $2 ] 
+		if [ -f $LOCALPATH ] 
 		then
 			echo "Blue lines are added on local - red are removed"
 			# do an actual diff on two files
-			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$2" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
-		if [ -d $2 ] 
+		if [ -d $LOCALPATH ] 
 		then
 			# diff structures using rsync
 			echo "Blue lines are changed or added on local."
@@ -136,20 +136,20 @@ case "$1" in
 		
 	# diff and grep for text within diff result
 	"diffsearch" )
-		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
+		if [ ! -n "$LOCALPATH" ]; then echo "Missing path"; exit 1; 
 		fi
 		if [ ! -n "$3" ]; then echo "Missing search string"; exit 1; 
 		fi
 
-		echo "Diffing '$2' and searching for '$3' ...";
+		echo "Diffing '$LOCALPATH' and searching for '$3' ...";
 
-		if [ -f $2 ] 
+		if [ -f $LOCALPATH ] 
 		then
 			echo "Blue lines are added on local - red are removed"
 			# do an actual diff on two files
-			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$2" | grep $3 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+			ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | grep $3 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 		fi
-		if [ -d $2 ] 
+		if [ -d $LOCALPATH ] 
 		then
 			echo "Changed files :"
 			# diff structures using rsync and iterate result outputting only actual file names
@@ -160,7 +160,7 @@ case "$1" in
 	
 		;;
 	"down" )
-		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		if [ ! -n "$LOCALPATH" ]; then echo "missing path"; exit 1; 
 		fi
 
 		# check if "http/" is owned by the current user. If not, downloading files, will probably cause trouble. Confirm.
@@ -226,26 +226,26 @@ case "$1" in
 		
 		;;
 	"up" )
-		if [ ! -n "$2" ]; then echo "missing path"; exit 1; 
+		if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
 		fi
 
-		echo "Uploading $2 ...";
+		echo "Uploading $LOCALPATH ...";
 		rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH		
 		;;
 
 	# create tar with folder
 	"dumplocal" )		
-		if [ ! -n "$2" ]; then echo "Missing path"; exit 1; 
+		if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy dumplocal <path>"; exit 1; 
 		fi
 
-		DUMPPATH=`echo $LOCALSITENAME-local-$2 | sed 's/\//-/g'`
+		DUMPPATH=`echo $LOCALSITENAME-local-$LOCALPATH | sed 's/\//-/g'`
 		echo $DUMPPATH
 		
-		tar -cvfz $DUMPPATH.tar.gz $2
+		tar -cvfz $DUMPPATH.tar.gz $LOCALPATH
 		;;
 	
 	"dumpremote" )
-		ssh $REMOTEUSER@$REMOTEHOST "tar -pcvfz ~/$LOCALSITENAME-local.tar.gz $2"
+		ssh $REMOTEUSER@$REMOTEHOST "tar -pcvfz ~/$LOCALSITENAME-local.tar.gz $LOCALPATH"
 		scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH 		
 		
 		
