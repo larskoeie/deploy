@@ -24,31 +24,26 @@ if [ -d "http/typo3" ]; then
 fi
 
 if [ $ISTYPO3 -eq 1 ]; then
-	php_code=<<<`the_secret_delimiter`;
-<?php 
-		# we grab the version from sysext cms
-		$_EXTKEY = 'cms';
-		include(getcwd() . '/http/typo3/sysext/' . $_EXTKEY . '/ext_emconf.php'); 
-		$t3_version = $EM_CONF['cms']['version'];
+	php_code=$(cat <<-'EOF' 
+		$_EXTKEY = "cms";
+		include(getcwd() . "/http/typo3/sysext/" . $_EXTKEY . "/ext_emconf.php"); 
+		$t3_version = $EM_CONF["cms"]["version"];
 	
-		# grab localconf
-		$conffile = getcwd() . '/http/typo3conf/localconf.php';
+		$conffile = getcwd() . "/http/typo3conf/localconf.php";
 		if (is_file($conffile)) {
-			# 4.7 and backwards
 			include($conffile); 
 			$db_host = $typo_db_host;
 			$db_username = $typo_db_username;
 			$db_password = $typo_db_password;
 			$db_db = $typo_db;	
 		} else {
-			# 6.0 and onwards
-			$conffile = getcwd() . '/http/typo3conf/LocalConfiguration.php';
+			$conffile = getcwd() . "/http/typo3conf/LocalConfiguration.php";
 			if (is_file($conffile)) {
 				$c= (include($conffile)); 
-				$db_host = $c['DB']['host'];
-				$db_username = $c['DB']['username'];
-				$db_password = $c['DB']['password'];
-				$db_db = $c['DB']['database'];	
+				$db_host = $c["DB"]["host"];
+				$db_username = $c["DB"]["username"];
+				$db_password = $c["DB"]["password"];
+				$db_db = $c["DB"]["database"];	
 			}
 		
 		}	
@@ -57,12 +52,13 @@ if [ $ISTYPO3 -eq 1 ]; then
 			$db_host,
 			$db_username,
 			$db_password,
-			$db_db,
+			$db_db
 		));
-	?>
-the_secret_delimiter
-	echo 123$php_code
-	#php_cwd=`/usr/bin/php 
+
+EOF
+)
+
+	php_cwd=`/usr/bin/php -r "$php_code"`
 	
 	CONFIG=$php_cwd
 	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
@@ -70,11 +66,20 @@ the_secret_delimiter
 	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
 	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
 	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+	echo $LOCALDBHOST
+
+php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
+/usr/bin/php -r "print_r($_SERVER)"
+EOF
+
+		echo $php_cwd
+	
+	
+	
 fi
 	
-	echo $LOCALDBHOST
 	handled=1
-	exit 0
+	exit
 	
 case "$1" in 
 	"cc" )

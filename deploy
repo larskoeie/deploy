@@ -14,6 +14,9 @@ SCRIPT=$(readlink -f $0)
 SCRIPTPATH=`dirname $SCRIPT`
 REMOTEHTTPFOLDER="http/"
 
+# "ssh" or "ftp"
+REMOTETYPE="ssh"
+
 LOCALROOT=`pwd`
 
 if [ ! -n "$1" ]; then echo "usage: deploy <command> path
@@ -87,9 +90,9 @@ if [ -d "http/core/includes" ]; then echo "Looks like Drupal 8 site";
 	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal8.txt"
 fi
 
-source deploy-typo3
+#source deploy-typo3
 
-if [ $handled -eq 1 ]; then
+if [ $handled ]; then
 	exit 0;
 fi
 
@@ -160,7 +163,7 @@ case "$1" in
 	
 		;;
 	"down" )
-		if [ ! -n "$LOCALPATH" ]; then echo "missing path"; exit 1; 
+		if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1; 
 		fi
 
 		# check if "http/" is owned by the current user. If not, downloading files, will probably cause trouble. Confirm.
@@ -178,10 +181,14 @@ case "$1" in
 		fi
 
 		echo "Downloading $LOCALPATH ...";
-		# download structure or single file using rsync
-		rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH 
+		case "$REMOTETYPE" in 
+			"ssh" )	
+				# download structure or single file using rsync
+				rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH 
+				;;
+				
+		esac
 		;;
-
 	"downdb" )
 		DUMPPATH="$LOCALSITENAME-remote.sql"
 		# dump remote db
