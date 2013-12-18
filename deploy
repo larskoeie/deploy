@@ -15,7 +15,7 @@ SCRIPTPATH=`dirname $SCRIPT`
 REMOTEHTTPFOLDER="http/"
 
 # "ssh" or "ftp"
-REMOTETYPE="ssh"
+REMOTETYPE="ftp"
 
 LOCALROOT=`pwd`
 
