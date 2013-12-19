@@ -10,6 +10,13 @@ local_clear_cache() {
 	
 }
 
+if [ -d "http/includes" ]; then echo "Looks like Drupal 7 site";
+	ISDRUPAL=TRUE; 
+	ISDRUPAL7=TRUE;           
+	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal7.txt"
+fi
+
+
 php_cwd=`/usr/bin/php << 'EOF'
 <?php 
 		
