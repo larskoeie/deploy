@@ -9,7 +9,7 @@ local_clear_cache() {
 	echo "Clearing cache ..."
 	
 	# version 4.7 and backwards
-	rm http/typo3conf/temp_CACHED*
+	rm -f http/typo3conf/temp_CACHED*
 	
 	# version 6.0 and onwards
 	rm -rf http/typo3temp/{cache_core,cache_phpcode,fluid_template,class_cache}	
@@ -24,24 +24,19 @@ if [ -d "http/typo3" ]; then
 fi
 
 if [ $ISTYPO3 -eq 1 ]; then
-	php_code=<<<`the_secret_delimiter`;
-<?php 
-		# we grab the version from sysext cms
+	php_code=$(cat <<-'EOF' 
 		$_EXTKEY = 'cms';
 		include(getcwd() . '/http/typo3/sysext/' . $_EXTKEY . '/ext_emconf.php'); 
 		$t3_version = $EM_CONF['cms']['version'];
 	
-		# grab localconf
 		$conffile = getcwd() . '/http/typo3conf/localconf.php';
 		if (is_file($conffile)) {
-			# 4.7 and backwards
 			include($conffile); 
 			$db_host = $typo_db_host;
 			$db_username = $typo_db_username;
 			$db_password = $typo_db_password;
 			$db_db = $typo_db;	
 		} else {
-			# 6.0 and onwards
 			$conffile = getcwd() . '/http/typo3conf/LocalConfiguration.php';
 			if (is_file($conffile)) {
 				$c= (include($conffile)); 
@@ -59,10 +54,10 @@ if [ $ISTYPO3 -eq 1 ]; then
 			$db_password,
 			$db_db,
 		));
-	?>
-the_secret_delimiter
-	echo 123$php_code
-	#php_cwd=`/usr/bin/php 
+EOF
+)
+
+	php_cwd=`/usr/bin/php -r "$php_code"`
 	
 	CONFIG=$php_cwd
 	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
@@ -71,10 +66,6 @@ the_secret_delimiter
 	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
 	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
 fi
-	
-	echo $LOCALDBHOST
-	handled=1
-	exit 0
 	
 case "$1" in 
 	"cc" )

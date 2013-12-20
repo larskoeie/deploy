@@ -89,7 +89,7 @@ fi
 
 source deploy-typo3
 
-if [ $handled -eq 1 ]; then
+if [ $handled ]; then
 	exit 0;
 fi
 
