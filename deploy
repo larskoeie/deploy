@@ -34,10 +34,10 @@ commands :
   dumplocaldb
     Dump the local db to local file
   dumpremotedb
-    Dump the remote db to local file
+    Dump the remote db to local file. SSH mode only.
   up
     Upload the specified path from local to remote using rsync
-      
+
 ";
   exit 1;
 fi
@@ -132,13 +132,13 @@ case "$1" in
 			
 			"ftp" )
         cd .deploy/remote
-        wget -r -nH ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
+        wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
         cd ../..
 		    if [ -f $LOCALPATH ] 
 		    then
 		      echo "Blue lines are added on local - red are removed"
 		      # do an actual diff on two files
-		      diff -w -u - $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+		      diff -w -u $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed $DIFFCOLORSED
 		    fi
 		    if [ -d $LOCALPATH ] 
 		    then
