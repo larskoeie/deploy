@@ -23,14 +23,14 @@ if [ ! -n "$1" ]; then echo "usage: deploy <command> path
 commands :
   diff
     Show files and folders in specified path on local that are not on remote or have different size or timestamp
-    
+
   diffdb
-  
+
   down
     Download the specified path from remote to local using rsync
 
   downdb
-    Dump remote db to file, download file and import into local db.    
+    Dump remote db to file, download file and import into local db.
   dumplocaldb
     Dump the local db to local file
   dumpremotedb
@@ -74,23 +74,23 @@ EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 REMOTEPATH="${REMOTEHTTPFOLDER%/}/${2:5}"
 
 if [ $REMOTETYPE == "ftp" ]; then
-	unset REMOTEPASSWORD
-	prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
-	while IFS= read -p "$prompt" -r -s -n 1 char
-	do
-	    if [[ $char == $'\0' ]]
-	    then
-	        break
-	    fi
-	    prompt='*'
-	    REMOTEPASSWORD+="$char"
-	done
-	echo
-fi	
+  unset REMOTEPASSWORD
+  prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
+  while IFS= read -p "$prompt" -r -s -n 1 char
+  do
+      if [[ $char == $'\0' ]]
+      then
+          break
+      fi
+      prompt='*'
+      REMOTEPASSWORD+="$char"
+  done
+  echo
+fi
 
 # if path on local is a directory, make sure it has a trailing slash, on local AND on remote
 LOCALPATH=$2
-if [ -d "$LOCALPATH" ]; then 
+if [ -d "$LOCALPATH" ]; then
   LOCALPATH="${LOCALPATH%/}/"
   REMOTEPATH="${REMOTEPATH%/}/"
 fi
@@ -102,7 +102,7 @@ if [ $handled ]; then
   exit 0;
 fi
 
-case "$1" in 
+case "$1" in
   "config" )
     cat .deploy.cnf
     ;;
@@ -112,94 +112,92 @@ case "$1" in
 
     echo "Diffing $LOCALPATH ...";
 
-    case "$REMOTETYPE" in 
-      "ssh" )  
-		
-		    if [ -f $LOCALPATH ] 
-		    then
-		      echo "Blue lines are added on local - red are removed"
-		      # do an actual diff on two files
-		      ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-		    fi
-		    if [ -d $LOCALPATH ] 
-		    then
-		      # diff structures using rsync
-		      echo "Blue lines are changed or added on local."
-		      rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
-		      
-		    fi
-			;;
-			
-			"ftp" )
+    case "$REMOTETYPE" in
+      "ssh" )
+        if [ -f $LOCALPATH ]
+        then
+          echo "Blue lines are added on local - red are removed"
+          # do an actual diff on two files
+          ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+        fi
+        if [ -d $LOCALPATH ]
+        then
+          # diff structures using rsync
+          echo "Blue lines are changed or added on local."
+          rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
+
+        fi
+      ;;
+
+      "ftp" )
         cd .deploy/remote
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
         cd ../..
-		    if [ -f $LOCALPATH ] 
-		    then
-		      echo "Blue lines are added on local - red are removed"
-		      # do an actual diff on two files
-		      diff -w -u $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed $DIFFCOLORSED
-		    fi
-		    if [ -d $LOCALPATH ] 
-		    then
-		      # diff structures using rsync
-		      echo "Blue lines are changed or added on local."
-	        rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
-		      
-		    fi
+        if [ -f $LOCALPATH ]
+        then
+          echo "Blue lines are added on local - red are removed"
+          # do an actual diff on two files
+          diff -w -u $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed $DIFFCOLORSED
+        fi
+        if [ -d $LOCALPATH ]
+        then
+          # diff structures using rsync
+          echo "Blue lines are changed or added on local."
+          rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
 
-			
-    	;;
-    esac	
+        fi
+
+      ;;
+    esac
     ;;
-    
+
   "diffdb" )
     # do a diff on the two db-dump files
     LOCAL="$LOCALSITENAME-local.sql"
     REMOTE="$LOCALSITENAME-remote.sql"
-    
-    if [ ! -f $LOCAL ] 
+
+    if [ ! -f $LOCAL ]
       then echo "no local dump - use dumplocaldb"; exit;
     fi
-    if [ ! -f $REMOTE ] 
+    if [ ! -f $REMOTE ]
       then echo "no remote dump - use dumpremotedb"; exit;
     fi
-    
+
     diff $LOCAL $REMOTE | sed $DIFFCOLORSED
     ;;
-    
+
   # diff and grep for text within diff result
   "diffsearch" )
-    if [ ! -n "$LOCALPATH" ]; then echo "Missing path"; exit 1; 
+    if [ ! -n "$LOCALPATH" ]; then echo "Missing path"; exit 1;
     fi
-    if [ ! -n "$3" ]; then echo "Missing search string"; exit 1; 
+    if [ ! -n "$3" ]; then echo "Missing search string"; exit 1;
     fi
 
     echo "Diffing '$LOCALPATH' and searching for '$3' ...";
 
-    if [ -f $LOCALPATH ] 
+    if [ -f $LOCALPATH ]
     then
       echo "Blue lines are added on local - red are removed"
       # do an actual diff on two files
       ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | grep $3 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
     fi
-    if [ -d $LOCALPATH ] 
+    if [ -d $LOCALPATH ]
     then
       echo "Changed files :"
       # diff structures using rsync and iterate result outputting only actual file names
-      # skip directories and other stuff 
+      # skip directories and other stuff
       rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3
-      
+
     fi
-  
+
     ;;
   "down" )
-    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1; 
+    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1;
     fi
 
     # check if "http/" is owned by the current user. If not, downloading files, will probably cause trouble. Confirm.
     HTTPOWNER=$(stat -c %U http)
-    if [ $HTTPOWNER != $(id -u -n) ]; then 
+    if [ $HTTPOWNER != $(id -u -n) ]; then
       echo "You are not $HTTPOWNER. Continue? y/n";
       prompt=""
       read -p "$prompt" -r -s -n 1 char
@@ -212,17 +210,17 @@ case "$1" in
     fi
 
     echo "Downloading $LOCALPATH ...";
-    case "$REMOTETYPE" in 
-      "ssh" )  
+    case "$REMOTETYPE" in
+      "ssh" )
         # download structure or single file using rsync
-        rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH 
+        rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
-      "ftp" )      	
+      "ftp" )
         cd .deploy/remote
         wget -r -nH ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
         cd ../..
         rsync -avi $EXCLUDEFROM .deploy/remote$REMOTEROOT$REMOTEPATH $LOCALPATH
-        ;;        
+        ;;
     esac
     ;;
   "downdb" )
@@ -230,14 +228,14 @@ case "$1" in
     # dump remote db
     ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
     # download result
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH     
+    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
     # import
     mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < ./$DUMPPATH
     ;;
-    
+
   "dumplocaldb" )
     # this dump is specifically with diff in mind
-    if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1; 
+    if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
     fi
     DUMPPATH="$LOCALSITENAME-local.sql"
     #ignoretables=""
@@ -249,9 +247,9 @@ case "$1" in
     # --skip-extended-insert makes dump larger, but provides better results with diff later on
     mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
     ;;
-    
+
   "dumpremotedb" )
-    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1; 
+    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1;
     fi
     DUMPPATH="$LOCALSITENAME-remote.sql"
     ignoretables=""
@@ -260,42 +258,41 @@ case "$1" in
     #  ignoretables=`ssh $REMOTEUSER@$REMOTEHOST 'mysql -DN $REMOTEDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}''`
     #fi
     ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH     
-    ;;  
-    
+    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+    ;;
+
   "sqlq" )
     echo $2 > deploy-temp.sql;
     mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
-    
+
     ;;
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
 
     echo "Uploading $LOCALPATH ...";
-    rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH    
+    rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
     ;;
 
   # create tar with folder
-  "dumplocal" )    
-    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy dumplocal <path>"; exit 1; 
+  "dumplocal" )
+    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy dumplocal <path>"; exit 1;
     fi
 
     DUMPPATH=`echo $LOCALSITENAME-local-$LOCALPATH | sed 's/\//-/g'`
     echo $DUMPPATH
-    
+
     tar -cvfz $DUMPPATH.tar.gz $LOCALPATH
     ;;
-  
+
   "dumpremote" )
     ssh $REMOTEUSER@$REMOTEHOST "tar -pcvfz ~/$LOCALSITENAME-local.tar.gz $LOCALPATH"
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH     
-    
-    
+    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+
+
     ;;
-    
 esac
 
-if [ -f deploy-temp.sql ]; then rm deploy-temp.sql; 
+if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
 fi
-    
+
