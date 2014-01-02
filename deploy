@@ -25,7 +25,7 @@ commands :
     Show files and folders in specified path on local that are not on remote or have different size or timestamp
 
   diffdb
-
+    SSH mode only.
   down
     Download the specified path from remote to local using rsync
 
@@ -184,12 +184,10 @@ case "$1" in
     if [ -d $LOCALPATH ]
     then
       echo "Changed files :"
-      # diff structures using rsync and iterate result outputting only actual file names
-      # skip directories and other stuff
+      # diff structures using rsync
       rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3
 
     fi
-
     ;;
   "down" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1;
@@ -224,6 +222,11 @@ case "$1" in
     esac
     ;;
   "downdb" )
+    if [ $REMOTETYPE != "ssh" ] then
+      echo "SSH mode only."
+      exit 1;
+    fi
+
     DUMPPATH="$LOCALSITENAME-remote.sql"
     # dump remote db
     ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
@@ -249,6 +252,9 @@ case "$1" in
     ;;
 
   "dumpremotedb" )
+    if [ $REMOTETYPE != "ssh"] then echo "SSH mode only."; exit 1;
+    fi
+
     if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1;
     fi
     DUMPPATH="$LOCALSITENAME-remote.sql"
@@ -271,7 +277,19 @@ case "$1" in
     fi
 
     echo "Uploading $LOCALPATH ...";
-    rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+    case $REMOTETYPE in 
+      "ssh" )
+        rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+      ;;
+      "ftp" )
+        rsync -avnic $EXCLUDEFROM $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH
+        cd .deploy/remote
+        echo  <<EOF
+open $REMOTEHOST
+user $REMOTEUSER $REMOTEPASSWORD
+put $REMOTEROOT$REMOTEPATH
+EOF 
+      ;;
     ;;
 
   # create tar with folder
