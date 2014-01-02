@@ -12,9 +12,10 @@
 SCRIPT=$(readlink -f $0)
 # Absolute path this script is in. /home/user/bin
 SCRIPTPATH=`dirname $SCRIPT`
+LOCALHTTPFOLDER="http/"
 REMOTEHTTPFOLDER="http/"
 
-# "ssh" or "ftp"
+# "local", "ssh" or "ftp"
 REMOTETYPE="ssh"
 
 LOCALROOT=`pwd`
@@ -25,7 +26,7 @@ commands :
     Show files and folders in specified path on local that are not on remote or have different size or timestamp
 
   diffdb
-    SSH mode only.
+    Not on FTP mode.
   down
     Download the specified path from remote to local using rsync
 
@@ -34,7 +35,7 @@ commands :
   dumplocaldb
     Dump the local db to local file
   dumpremotedb
-    Dump the remote db to local file. SSH mode only.
+    Dump the remote db to local file. Not on FTP mode.
   up
     Upload the specified path from local to remote using rsync
 
@@ -50,30 +51,47 @@ fi
 # load site configuration
 if [ ! -f ".deploy.cnf" ]; then echo "Missing .deploy.cnf."; exit;
 fi
-source .deploy.cnf
-# unset passwords
-LOCALDBPASSWORD=""
-REMOTEDBPASSWORD=""
+
+. $LOCALROOT/.deploy.cnf
 
 # basic check of configuration
-if [ ! $REMOTEHOST ]; then echo "Invalid .deploy.cnf"; exit;
+if [ ! $REMOTEROOT ]; then echo "Invalid .deploy.cnf"; exit;
 fi
+case $REMOTETYPE in 
+  "local" )
+    if [ $LOCALROOT = $REMOTEROOT ]; then echo "Remote site is same as local."; exit;
+    fi
+  ;;
+  "ssh" )
+    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
+    fi
+    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
+    fi
+  ;;
+  "ftp" )
+    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
+    fi
+    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
+    fi
+  ;;
+esac
 
-if [ ! -d ".deploy/remote" ]; then
-  mkdir -p .deploy/remote
-fi
 
+
+# unset passwords
+REMOTEPASSWORD=""
+LOCALDBPASSWORD=""
+REMOTEDBPASSWORD=""
 # some var initialization
 LOCALSITENAME=`basename $LOCALROOT`
 REMOTESITENAME=`basename $REMOTEROOT`
 TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
 EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 
-# substitute "http/" with the name of the http-folder on remote
-REMOTEPATH="${REMOTEHTTPFOLDER%/}/${2:5}"
 
-if [ $REMOTETYPE == "ftp" ]; then
+if [ "$REMOTETYPE" = "ftp" ]; then
   unset REMOTEPASSWORD
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
   while IFS= read -p "$prompt" -r -s -n 1 char
@@ -86,10 +104,16 @@ if [ $REMOTETYPE == "ftp" ]; then
       REMOTEPASSWORD+="$char"
   done
   echo
+  if [ ! -d ".deploy/remote" ]; then
+  	mkdir -p .deploy/remote
+	fi
+
 fi
 
-# if path on local is a directory, make sure it has a trailing slash, on local AND on remote
 LOCALPATH=$2
+# if path on local is a directory, make sure it has a trailing slash, on local AND on remote
+# substitute "http/" with the name of the http-folder on remote
+REMOTEPATH="${REMOTEHTTPFOLDER%/}/${2:5}"
 if [ -d "$LOCALPATH" ]; then
   LOCALPATH="${LOCALPATH%/}/"
   REMOTEPATH="${REMOTEPATH%/}/"
@@ -113,6 +137,17 @@ case "$1" in
     echo "Diffing $LOCALPATH ...";
 
     case "$REMOTETYPE" in
+      "local" )
+        if [ -f $LOCALPATH ] && [ -f $REMOTEROOT$REMOTEPATH ]
+        then
+          diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
+        fi
+        if [ -d $LOCALPATH ]
+        then
+					rsync -avnci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+        fi
+      
+      ;;
       "ssh" )
         if [ -f $LOCALPATH ]
         then
@@ -124,7 +159,7 @@ case "$1" in
         then
           # diff structures using rsync
           echo "Blue lines are changed or added on local."
-          rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/$/\x1b[0m/g"
+          rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
         fi
       ;;
@@ -168,9 +203,9 @@ case "$1" in
 
   # diff and grep for text within diff result
   "diffsearch" )
-    if [ ! -n "$LOCALPATH" ]; then echo "Missing path"; exit 1;
+    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diffsearch <path> <string>"; exit 1;
     fi
-    if [ ! -n "$3" ]; then echo "Missing search string"; exit 1;
+    if [ ! -n "$3" ]; then echo "Usage: deploy diffsearch <path> <string>"; exit 1;
     fi
 
     echo "Diffing '$LOCALPATH' and searching for '$3' ...";
@@ -202,13 +237,16 @@ case "$1" in
       if [[ $char != "y" ]]
       then
         echo;
-        exit;0
+        exit;
       fi
 
     fi
 
     echo "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
+      "local" )
+        rsync -avci $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
+      ;;
       "ssh" )
         # download structure or single file using rsync
         rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
@@ -222,7 +260,8 @@ case "$1" in
     esac
     ;;
   "downdb" )
-    if [ $REMOTETYPE != "ssh" ] then
+    if [ $REMOTETYPE != "ssh" ]
+    then
       echo "SSH mode only."
       exit 1;
     fi
@@ -252,7 +291,8 @@ case "$1" in
     ;;
 
   "dumpremotedb" )
-    if [ $REMOTETYPE != "ssh"] then echo "SSH mode only."; exit 1;
+    if [ $REMOTETYPE != "ssh"]
+    then echo "SSH mode only."; exit 1;
     fi
 
     if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1;
@@ -278,18 +318,22 @@ case "$1" in
 
     echo "Uploading $LOCALPATH ...";
     case $REMOTETYPE in 
+      "local" )
+        rsync -avci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED        
+      ;;
       "ssh" )
         rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
       ;;
       "ftp" )
         rsync -avnic $EXCLUDEFROM $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH
         cd .deploy/remote
-        echo  <<EOF
-open $REMOTEHOST
-user $REMOTEUSER $REMOTEPASSWORD
-put $REMOTEROOT$REMOTEPATH
-EOF 
+#        echo  <<EOF
+#open $REMOTEHOST
+#user $REMOTEUSER $REMOTEPASSWORD
+#put $REMOTEROOT$REMOTEPATH
+#EOF 
       ;;
+    esac
     ;;
 
   # create tar with folder
