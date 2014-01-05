@@ -9,7 +9,7 @@ local_clear_cache() {
 	echo "Clearing cache ..."
 	
 	# version 4.7 and backwards
-	rm http/typo3conf/temp_CACHED*
+	rm -f http/typo3conf/temp_CACHED*
 	
 	# version 6.0 and onwards
 	rm -rf http/typo3temp/{cache_core,cache_phpcode,fluid_template,class_cache}	
@@ -25,6 +25,7 @@ fi
 
 if [ $ISTYPO3 -eq 1 ]; then
 	php_code=$(cat <<-'EOF' 
+		error_reporting(E_ERROR | E_PARSE);
 		$_EXTKEY = "cms";
 		include(getcwd() . "/http/typo3/sysext/" . $_EXTKEY . "/ext_emconf.php"); 
 		$t3_version = $EM_CONF["cms"]["version"];
@@ -66,36 +67,38 @@ EOF
 	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
 	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
 	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
-	echo $LOCALDBHOST
+	echo "Local DB host : $LOCALDBHOST"
 
-php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
-/usr/bin/php -r "print_r($_SERVER)"
-EOF
+#php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
+#/usr/bin/php -r "print_r($_SERVER)"
+#EOF
 
-		echo $php_cwd
+#		echo $php_cwd
 	
 	
 	
 fi
 	
-	handled=1
-	exit
 	
 case "$1" in 
 	"cc" )
 		local_clear_cache
 		;;
 		
-	"make" )	
-		VERSION="6.1.7"
+	"typo3-make" )	
+		VERSION="4.5.27"
+		if [ ! -d .deploy ]; then mkdir .deploy
+		fi		
 		cd .deploy
 		wget "http://prdownloads.sourceforge.net/typo3/typo3_src-$VERSION.tar.gz"
 		cd ../http		
 		tar -zxvf ../.deploy/typo3_src-$VERSION.tar.gz
-		ln -s typo3_src-$VERSION.tar.gz typo3_src
+		ln -s typo3_src-$VERSION typo3_src
 		ln -s typo3_src/typo3 typo3
 		ln -s typo3_src/t3lib t3lib
 		ln -s typo3_src/index.php index.php
+		if [ ! -d fileadmin ]; then mkdir fileadmin 
+		fi
 		if [ ! -d typo3conf ]; then mkdir typo3conf 
 		fi
 		if [ ! -d typo3temp ]; then mkdir typo3temp 
@@ -122,6 +125,21 @@ case "$1" in
 		fi
 		;;		
 
+	"users-disable-except" )
+		if [ ISTYPO3 ]; then				
+			username=$2
+			if [ ! -n "$username" ]; then echo "Usage : deploy users-disable-except <except-username>"; exit 1;
+			fi
+			
+			echo "update be_users set disable=1 where username != '$username';" > deploy-temp.sql
+			handled=1;
+			
+		fi
+		if [ -f deploy-temp.sql ]; then
+			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+			echo "All users except '$username' disabled."
+		fi
+	;;
 
 esac
 

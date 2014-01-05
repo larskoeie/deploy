@@ -17,6 +17,7 @@ REMOTEHTTPFOLDER="http/"
 
 # "local", "ssh" or "ftp"
 REMOTETYPE="ssh"
+REMOTETITLE=""
 
 LOCALROOT=`pwd`
 
@@ -119,14 +120,33 @@ if [ -d "$LOCALPATH" ]; then
   REMOTEPATH="${REMOTEPATH%/}/"
 fi
 
-#source deploy-typo3
+. deploy-typo3
 #source deploy-drupal7
+
+if [ -n "$REMOTETITLE" ]
+then
+  echo Remote host : $REMOTETITLE
+fi
 
 if [ $handled ]; then
   exit 0;
 fi
 
 case "$1" in
+  "remote" )
+    CONFIG=$2
+    if [ -n "$CONFIG" ]; 
+    then
+      if [ ! -f .deploy-$CONFIG.cnf ]
+      then
+        echo No config file .deploy-$CONFIG.cnf
+        exit 1
+      fi
+      cp -f .deploy-$CONFIG.cnf .deploy.cnf
+      . .deploy.cnf
+      echo Switched to remote $REMOTETITLE
+    fi
+    ;;
   "config" )
     cat .deploy.cnf
     ;;
@@ -144,9 +164,9 @@ case "$1" in
         fi
         if [ -d $LOCALPATH ]
         then
-					rsync -avnci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          rsync -avnci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
         fi
-      
+
       ;;
       "ssh" )
         if [ -f $LOCALPATH ]
