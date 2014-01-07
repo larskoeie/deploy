@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 #
 #
@@ -12,14 +12,14 @@
 SCRIPT=$(readlink -f $0)
 # Absolute path this script is in. /home/user/bin
 SCRIPTPATH=`dirname $SCRIPT`
+LOCALROOT=`pwd`
+
+# apply sane config default values
 LOCALHTTPFOLDER="http/"
 REMOTEHTTPFOLDER="http/"
-
-# "local", "ssh" or "ftp"
-REMOTETYPE="ssh"
+REMOTETYPE="ssh" # "local", "ssh" or "ftp"
 REMOTETITLE=""
 
-LOCALROOT=`pwd`
 
 if [ ! -n "$1" ]; then echo "usage: deploy <command> path
 commands :
@@ -29,7 +29,7 @@ commands :
   diffdb
     Not on FTP mode.
   down
-    Download the specified path from remote to local using rsync
+    Download the specified path from remote to local
 
   downdb
     Dump remote db to file, download file and import into local db.
@@ -38,7 +38,7 @@ commands :
   dumpremotedb
     Dump the remote db to local file. Not on FTP mode.
   up
-    Upload the specified path from local to remote using rsync
+    Upload the specified path from local to remote
 
 ";
   exit 1;
@@ -56,11 +56,11 @@ fi
 . $LOCALROOT/.deploy.cnf
 
 # basic check of configuration
-if [ ! $REMOTEROOT ]; then echo "Invalid .deploy.cnf"; exit;
+if [ ! $REMOTEROOT ]; then echo "Missing remoteroot"; exit;
 fi
 case $REMOTETYPE in 
   "local" )
-    if [ $LOCALROOT = $REMOTEROOT ]; then echo "Remote site is same as local."; exit;
+    if [ $LOCALROOT$LOCALHTTPFOLDER = $REMOTEROOT$REMOTEHTTPFOLDER ]; then echo "Remote site is same as local."; exit;
     fi
   ;;
   "ssh" )
@@ -111,14 +111,41 @@ if [ "$REMOTETYPE" = "ftp" ]; then
 
 fi
 
-LOCALPATH=$2
-# if path on local is a directory, make sure it has a trailing slash, on local AND on remote
-# substitute "http/" with the name of the http-folder on remote
-REMOTEPATH="${REMOTEHTTPFOLDER%/}/${2:5}"
-if [ -d "$LOCALPATH" ]; then
-  LOCALPATH="${LOCALPATH%/}/"
-  REMOTEPATH="${REMOTEPATH%/}/"
+if [ -n "$2" ]; then
+	
+	# remove slashes from httpfolder
+	REMOTEROOT=`echo $REMOTEROOT | sed "s/\/*$//g"` 
+	LOCALHTTPFOLDER=`echo $LOCALHTTPFOLDER | sed "s/\/*$//g"` 
+	REMOTEHTTPFOLDER=`echo $REMOTEHTTPFOLDER | sed "s/\/*$//g"` 
+
+	LOCALPATH=$2
+	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`
+
+	# add trailing slashes
+	LOCALROOT="$LOCALROOT/"
+	REMOTEROOT="$REMOTEROOT/"
+	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"	
+	REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"	
+
+	# remove any trailing slash
+	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"` 
+	REMOTEPATH=`echo $REMOTEPATH | sed "s/\/*$//g"` 
+
+	# if path on local is a directory, add trailing slash, on local AND on remote
+	if [ -d "$LOCALPATH" ]; then
+	  LOCALPATH="$LOCALPATH/"
+	  REMOTEPATH="$REMOTEPATH/"
+	fi
+
+	if [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
+		echo "Error: local and remote site are in the same place."
+		exit
+	fi
+	
+	exit
+	
 fi
+
 
 . deploy-typo3
 #source deploy-drupal7
@@ -154,7 +181,7 @@ case "$1" in
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
     fi
 
-    echo "Diffing $LOCALPATH ...";
+    echo "Diffing $LOCALPATH with $REMOTEPATH ...";
 
     case "$REMOTETYPE" in
       "local" )
