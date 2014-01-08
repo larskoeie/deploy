@@ -21,8 +21,8 @@ REMOTETYPE="ssh" # "local", "ssh" or "ftp"
 REMOTETITLE=""
 
 
-if [ ! -n "$1" ]; then echo "usage: deploy <command> path
-commands :
+if [ ! -n "$1" ]; then echo "Usage: deploy <command> path
+General commands :
   diff
     Show files and folders in specified path on local that are not on remote or have different size or timestamp
 
@@ -141,9 +141,7 @@ if [ -n "$2" ]; then
 		echo "Error: local and remote site are in the same place."
 		exit
 	fi
-	
-	exit
-	
+		
 fi
 
 
@@ -355,6 +353,9 @@ case "$1" in
     ;;
 
   "sqlq" )
+    if [ ! -n "$2" ]; then echo "Usage: deploy sqlq <sql>"; exit 1;
+    fi
+
     echo $2 > deploy-temp.sql;
     mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
 
@@ -402,6 +403,6 @@ case "$1" in
     ;;
 esac
 
-if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
-fi
+#if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
+#fi
 

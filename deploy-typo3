@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # after
 after () {
@@ -15,6 +15,22 @@ local_clear_cache() {
 	rm -rf http/typo3temp/{cache_core,cache_phpcode,fluid_template,class_cache}	
 }
 
+typo3_usage() {
+	echo "
+TYPO3 specific commands :
+	cc
+		Clear cache. Remove temporary cached versions of ext_localconf and ext_tables. Not deleting cache in DB.
+		
+  typo3-make
+    Fetch TYPO3 core from typo3.org, untar it and make symlinks.
+  
+  user-create <username>
+    Create backend user with username <username> and password 'password'.
+    
+  users-disable-except <username>
+    Disable all backend users except <username>.
+"
+}
 
 # try to recognize TYPO3 - there might be better ways
 ISTYPO3=0; 
