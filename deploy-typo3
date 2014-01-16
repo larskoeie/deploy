@@ -8,38 +8,40 @@ after () {
 local_clear_cache() {
 	echo "Clearing cache ..."
 	
+	echo "TRUNCATE cache_treelist; TRUNCATE cache_pagesection; TRUNCATE cache_hash; TRUNCATE cache_pages;" > deploy-temp.sql
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+
 	# version 4.7 and backwards
 	rm -f http/typo3conf/temp_CACHED*
 	
 	# version 6.0 and onwards
-	rm -rf http/typo3temp/{cache_core,cache_phpcode,fluid_template,class_cache}	
+	rm -rf http/typo3temp/Cache/Code
 }
 
-typo3_usage() {
-	echo "
-TYPO3 specific commands :
-	cc
-		Clear cache. Remove temporary cached versions of ext_localconf and ext_tables. Not deleting cache in DB.
-		
-  typo3-make
-    Fetch TYPO3 core from typo3.org, untar it and make symlinks.
-  
-  user-create <username>
-    Create backend user with username <username> and password 'password'.
-    
-  users-disable-except <username>
-    Disable all backend users except <username>.
+USAGE="$USAGE
+  TYPO3 specific commands :
+    cc
+      Clear cache. Remove temporary cached versions of ext_localconf and ext_tables. Not deleting cache in DB.
+    typo3-make
+      Fetch TYPO3 core from typo3.org, untar it and make symlinks.  
+    user-create <username>
+      Create backend user with username <username> and password 'password'.
+    users-disable-except <username>
+      Disable all backend users except <username>.
 "
-}
+
+
 
 # try to recognize TYPO3 - there might be better ways
 ISTYPO3=0; 
-if [ -d "http/typo3" ]; then 
+if [ -d "http/typo3conf" ]; then 
 	ISTYPO3=1; 
+	echo "TYPO3 found"
 	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-typo3.txt"
 fi
 
-if [ $ISTYPO3 -eq 1 ]; then
+
+if [ $ISTYPO3 ] && [ !-z $LOCALDBPASSWORD ]; then
 	php_code=$(cat <<-'EOF' 
 		error_reporting(E_ERROR | E_PARSE);
 		$_EXTKEY = "cms";
@@ -94,7 +96,11 @@ EOF
 	
 	
 fi
-	
+
+if [ $handled ]
+then 
+	exit; 
+fi	
 	
 case "$1" in 
 	"cc" )
@@ -102,13 +108,17 @@ case "$1" in
 		;;
 		
 	"typo3-make" )	
-		VERSION="4.5.27"
+		VERSION=$2
+		if [ ! -n "$VERSION" ]; then echo "Usage : deploy typo3-make <version>"; exit 1;
+		fi
+		
 		if [ ! -d .deploy ]; then mkdir .deploy
 		fi		
 		cd .deploy
 		wget "http://prdownloads.sourceforge.net/typo3/typo3_src-$VERSION.tar.gz"
 		cd ../http		
 		tar -zxvf ../.deploy/typo3_src-$VERSION.tar.gz
+		rm ../.deploy/typo3_src-$VERSION.tar.gz
 		ln -s typo3_src-$VERSION typo3_src
 		ln -s typo3_src/typo3 typo3
 		ln -s typo3_src/t3lib t3lib
@@ -120,6 +130,7 @@ case "$1" in
 		if [ ! -d typo3temp ]; then mkdir typo3temp 
 		fi				
 		echo "Done."
+		handled=1
 		;;
 		
 	"user-create" )
@@ -138,6 +149,7 @@ case "$1" in
 		if [ -f deploy-temp.sql ]; then
 			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
 			echo "User '$username' created with password 'password' - please change password immediately."
+			handled=1
 		fi
 		;;		
 
@@ -148,12 +160,13 @@ case "$1" in
 			fi
 			
 			echo "update be_users set disable=1 where username != '$username';" > deploy-temp.sql
-			handled=1;
 			
 		fi
 		if [ -f deploy-temp.sql ]; then
 			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
 			echo "All users except '$username' disabled."
+			handled=1;
+	
 		fi
 	;;
 

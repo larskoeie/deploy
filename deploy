@@ -1,11 +1,7 @@
 #!/bin/sh
 
 #
-#
-#
 # - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
-#
-#
 #
 
 # Absolute path to this script. /home/user/bin/foo.sh
@@ -21,26 +17,29 @@ REMOTETYPE="ssh" # "local", "ssh" or "ftp"
 REMOTETITLE=""
 
 
-if [ ! -n "$1" ]; then echo "Usage: deploy <command> path
-General commands :
-  diff
-    Show files and folders in specified path on local that are not on remote or have different size or timestamp
-
-  diffdb
-    Not on FTP mode.
-  down
-    Download the specified path from remote to local
-
-  downdb
-    Dump remote db to file, download file and import into local db.
-  dumplocaldb
-    Dump the local db to local file
-  dumpremotedb
-    Dump the remote db to local file. Not on FTP mode.
-  up
-    Upload the specified path from local to remote
-
+USAGE="Usage: deploy <command> [path]
+  General commands :
+    diff
+      Show files and folders in specified path on local that are not on remote or have different size or timestamp
+    diffdb
+      Not on FTP mode.
+    down
+      Download the specified path from remote to local
+    downdb
+      Dump remote db to file, download file and import into local db.
+    dumplocaldb
+      Dump the local db to local file
+    dumpremotedb
+      Dump the remote db to local file. Not on FTP mode.
+    up
+      Upload the specified path from local to remote
 ";
+
+. deploy-typo3
+. deploy-drupal7
+
+if [ ! -n "$1" ]; then 
+	echo "$USAGE"
   exit 1;
 fi
 
@@ -56,26 +55,26 @@ fi
 . $LOCALROOT/.deploy.cnf
 
 # basic check of configuration
-if [ ! $REMOTEROOT ]; then echo "Missing remoteroot"; exit;
-fi
-case $REMOTETYPE in 
-  "local" )
-    if [ $LOCALROOT$LOCALHTTPFOLDER = $REMOTEROOT$REMOTEHTTPFOLDER ]; then echo "Remote site is same as local."; exit;
-    fi
-  ;;
-  "ssh" )
-    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
-    fi
-    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
-    fi
-  ;;
-  "ftp" )
-    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
-    fi
-    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
-    fi
-  ;;
-esac
+#if [ ! $REMOTEROOT ]; then echo "Missing remoteroot"; exit;
+#fi
+#case $REMOTETYPE in 
+#  "local" )
+#    if [ $LOCALROOT$LOCALHTTPFOLDER = $REMOTEROOT$REMOTEHTTPFOLDER ]; then echo "Remote site is same as local."; exit;
+#    fi
+#  ;;
+#  "ssh" )
+#    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
+#    fi
+#    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
+#    fi
+#  ;;
+#  "ftp" )
+#    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
+#    fi
+#    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
+#    fi
+#  ;;
+#esac
 
 
 
@@ -137,8 +136,8 @@ if [ -n "$2" ]; then
 	  REMOTEPATH="$REMOTEPATH/"
 	fi
 
-	if [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
-		echo "Error: local and remote site are in the same place."
+	if [ "$REMOTETYPE" = "local"] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
+		echo "Local and remote site are in the same place."
 		exit
 	fi
 		
@@ -179,17 +178,23 @@ case "$1" in
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
     fi
 
-    echo "Diffing $LOCALPATH with $REMOTEPATH ...";
-
+    if [ -f $LOCALPATH ]
+    then
+      echo -n "Local file :  ";
+      ls -l $LOCALPATH
+    fi
+    
     case "$REMOTETYPE" in
       "local" )
         if [ -f $LOCALPATH ] && [ -f $REMOTEROOT$REMOTEPATH ]
-        then
+        then          
+          echo -n "Remote file : "
+          ls -l $REMOTEROOT$REMOTEPATH
           diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
-          rsync -avnci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          rsync -avnci $LOCALPATH $REMOTEROOT$REMOTEPATH | grep ">f" | sed $RSYNCCOLORSED
         fi
 
       ;;
@@ -203,7 +208,7 @@ case "$1" in
         if [ -d $LOCALPATH ]
         then
           # diff structures using rsync
-          echo "Blue lines are changed or added on local."
+          echo "Blue lines are changed or added on local - red are removed."
           rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
         fi
@@ -340,7 +345,7 @@ case "$1" in
     then echo "SSH mode only."; exit 1;
     fi
 
-    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb - check .deploy.cnf"; exit 1;
+    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb"; exit 1;
     fi
     DUMPPATH="$LOCALSITENAME-remote.sql"
     ignoretables=""
@@ -352,10 +357,18 @@ case "$1" in
     scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
     ;;
 
+	"importlocaldb" )	  
+	  if [ ! -n "$2" ]; then echo "Usage: deploy importlocaldb <file>"; exit 1;
+    fi
+		mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2		
+    ;;
+    
   "sqlq" )
     if [ ! -n "$2" ]; then echo "Usage: deploy sqlq <sql>"; exit 1;
     fi
-
+		if [ ! -n "$LOCALDB" ]; then echo "Missing localdb"; exit 1;
+    fi
+		
     echo $2 > deploy-temp.sql;
     mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
 
@@ -396,13 +409,10 @@ case "$1" in
     ;;
 
   "dumpremote" )
-    ssh $REMOTEUSER@$REMOTEHOST "tar -pcvfz ~/$LOCALSITENAME-local.tar.gz $LOCALPATH"
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
-
 
     ;;
 esac
 
-#if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
-#fi
+if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
+fi
 

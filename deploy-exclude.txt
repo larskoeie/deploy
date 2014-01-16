@@ -1,3 +1,5 @@
+.deploy/*
+.deploy.cnf
 .git/*
 */.git/*
 

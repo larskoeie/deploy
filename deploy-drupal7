@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # after
 after () {
@@ -8,56 +8,146 @@ after () {
 local_clear_cache() {
 	echo "Clearing cache ..."
 	
+	echo "TRUNCATE cache_treelist; TRUNCATE cache_pagesection; TRUNCATE cache_hash; TRUNCATE cache_pages;" > deploy-temp.sql
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+
+	# version 4.7 and backwards
+	rm -f http/typo3conf/temp_CACHED*
+	
+	# version 6.0 and onwards
+	rm -rf http/typo3temp/Cache/Code
 }
 
-if [ -d "http/includes" ]; then echo "Looks like Drupal 7 site";
-	ISDRUPAL=TRUE; 
-	ISDRUPAL7=TRUE;           
+USAGE="$USAGE
+"
+
+
+# try to recognize TYPO3 - there might be better ways
+ISDRUPAL7=0; 
+if [ -d "includes" ]; then 
+	ISDRUPAL7=1; 
+	echo "Drupal 7 found"
 	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal7.txt"
 fi
 
 
-php_cwd=`/usr/bin/php << 'EOF'
-<?php 
-		
-	# grab localconf
-	$conffile = getcwd() . '/http/sites/default/settings.php';
-	echo $conffile;
-	if (is_file($conffile)) {
-		include($conffile); 
-		if (is_array($databases['default']['default'])) {
+if [ $ISDRUPAL7 ] && [ !-z $LOCALDBPASSWORD ]; then
+	php_code=$(cat <<-'EOF' 
+		error_reporting(E_ERROR | E_PARSE);
+		$drupal_version = '';
+	
+		$conffile = getcwd() . "/http/sites/default/settings.php";
+		if (is_file($conffile)) {
+			include($conffile); 
 			$db = $databases['default']['default'];
 			$db_host = $db['host'];
 			$db_username = $db['username'];
 			$db_password = $db['password'];
-			$db_db = $db['database'];	
-		}
-	}
-		
-	echo implode(";", array(
-		'',
-		$db_host,
-		$db_username,
-		$db_password,
-		$db_db,
-	));
-?>
-EOF`
+			$db_db = $db['database'];
+		}	
+		echo implode(";", array(
+			$drupal_version,
+			$db_host,
+			$db_username,
+			$db_password,
+			$db_db
+		));
 
-CONFIG=$php_cwd
-LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
-LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
-LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
-LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
-LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+EOF
+)
 
+	php_cwd=`/usr/bin/php -r "$php_code"`
+	
+	CONFIG=$php_cwd
+	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
+	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
+	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
+	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
+	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+	echo "Local DB host : $LOCALDBHOST"
+
+#php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
+#/usr/bin/php -r "print_r($_SERVER)"
+#EOF
+
+#		echo $php_cwd
+	
+	
+	
+fi
+
+if [ $handled ]
+then 
+	exit; 
+fi	
+	
 case "$1" in 
 	"cc" )
 		local_clear_cache
 		;;
+		
+	"typo3-make" )	
+		VERSION=$2
+		if [ ! -n "$VERSION" ]; then echo "Usage : deploy typo3-make <version>"; exit 1;
+		fi
+		
+		if [ ! -d .deploy ]; then mkdir .deploy
+		fi		
+		cd .deploy
+		wget "http://prdownloads.sourceforge.net/typo3/typo3_src-$VERSION.tar.gz"
+		cd ../http		
+		tar -zxvf ../.deploy/typo3_src-$VERSION.tar.gz
+		rm ../.deploy/typo3_src-$VERSION.tar.gz
+		ln -s typo3_src-$VERSION typo3_src
+		ln -s typo3_src/typo3 typo3
+		ln -s typo3_src/t3lib t3lib
+		ln -s typo3_src/index.php index.php
+		if [ ! -d fileadmin ]; then mkdir fileadmin 
+		fi
+		if [ ! -d typo3conf ]; then mkdir typo3conf 
+		fi
+		if [ ! -d typo3temp ]; then mkdir typo3temp 
+		fi				
+		echo "Done."
+		handled=1
+		;;
+		
 	"user-create" )
+		if [ ISTYPO3 ]; then				
+			username=$2
+			if [ ! -n "$username" ]; then echo "Usage : deploy user-create <username>"; exit 1;
+			fi
+			# password is "password"
+			# tested on TYPO3 4.7
+			echo "insert into be_users (username, password, admin) values ('$username', '5f4dcc3b5aa765d61d8327deb882cf99', 1);" > deploy-temp.sql
+			# different salting - should work on TYPO3 6.1 - not tested
+			# echo "insert into be_users (username, password, admin) values ('admin', '', 1);" > temp.sql
+			handled=1;
+			
+		fi
+		if [ -f deploy-temp.sql ]; then
+			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+			echo "User '$username' created with password 'password' - please change password immediately."
+			handled=1
+		fi
 		;;		
 
+	"users-disable-except" )
+		if [ ISTYPO3 ]; then				
+			username=$2
+			if [ ! -n "$username" ]; then echo "Usage : deploy users-disable-except <except-username>"; exit 1;
+			fi
+			
+			echo "update be_users set disable=1 where username != '$username';" > deploy-temp.sql
+			
+		fi
+		if [ -f deploy-temp.sql ]; then
+			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+			echo "All users except '$username' disabled."
+			handled=1;
+	
+		fi
+	;;
 
 esac
 
