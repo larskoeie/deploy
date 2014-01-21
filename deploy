@@ -4,6 +4,48 @@
 # - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
 #
 
+require_remote () {
+  if [ ! $REMOTEROOT ]
+  then
+    echo "Missing remote root"; exit;
+  fi
+  case $REMOTETYPE in
+    "local" )
+      if [ $LOCALROOT$LOCALHTTPFOLDER = $REMOTEROOT$REMOTEHTTPFOLDER ]; then echo "Remote site is same as local."; exit;
+      fi
+    ;;
+    "ssh" )
+      if [ ! $REMOTEHOST ]; then echo "Missing remote host"; exit;
+      fi
+      if [ ! $REMOTEUSER ]; then echo "Missing remote user"; exit;
+      fi
+    ;;
+    "ftp" )
+      if [ ! $REMOTEHOST ]; then echo "Missing remote host"; exit;
+      fi
+      if [ ! $REMOTEUSER ]; then echo "Missing remote user"; exit;
+      fi
+    ;;
+  esac
+}
+
+require_ssh () {
+  if [ $REMOTETYPE != "ssh" ]; then
+    echo "SSH mode only."
+    exit 1;
+  fi
+}
+
+remote_dumpdb () {
+   require_ssh
+    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb"; exit 1;
+    fi
+    DUMPPATH="$LOCALSITENAME-remote.sql"
+    ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
+    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+}
+
+
 # Absolute path to this script. /home/user/bin/foo.sh
 SCRIPT=$(readlink -f $0)
 # Absolute path this script is in. /home/user/bin
@@ -13,6 +55,7 @@ LOCALROOT=`pwd`
 # apply sane config default values
 LOCALHTTPFOLDER="http/"
 REMOTEHTTPFOLDER="http/"
+REMOTEINDEX="default"
 REMOTETYPE="ssh" # "local", "ssh" or "ftp"
 REMOTETITLE=""
 
@@ -35,8 +78,8 @@ USAGE="Usage: deploy <command> [path]
       Upload the specified path from local to remote
 ";
 
-. deploy-typo3
-. deploy-drupal7
+#. deploy-typo3
+#. deploy-drupal7
 
 if [ ! -n "$1" ]; then 
 	echo "$USAGE"
@@ -49,33 +92,13 @@ if [ ! -d "http" ]; then echo "Not site root.";
 fi
 
 # load site configuration
-if [ ! -f ".deploy.cnf" ]; then echo "Missing .deploy.cnf."; exit;
+if [ -f "$LOCALROOT/.deploy.cnf" ]
+then 
+  . $LOCALROOT/.deploy.cnf
+else
+  echo "No .deploy.cnf."; 
+  exit;
 fi
-
-. $LOCALROOT/.deploy.cnf
-
-# basic check of configuration
-#if [ ! $REMOTEROOT ]; then echo "Missing remoteroot"; exit;
-#fi
-#case $REMOTETYPE in 
-#  "local" )
-#    if [ $LOCALROOT$LOCALHTTPFOLDER = $REMOTEROOT$REMOTEHTTPFOLDER ]; then echo "Remote site is same as local."; exit;
-#    fi
-#  ;;
-#  "ssh" )
-#    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
-#    fi
-#    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
-#    fi
-#  ;;
-#  "ftp" )
-#    if [ ! $REMOTEHOST ]; then echo "Missing remotehost"; exit;
-#    fi
-#    if [ ! $REMOTEUSER ]; then echo "Missing remoteuser"; exit;
-#    fi
-#  ;;
-#esac
-
 
 
 # unset passwords
@@ -104,8 +127,8 @@ if [ "$REMOTETYPE" = "ftp" ]; then
       REMOTEPASSWORD+="$char"
   done
   echo
-  if [ ! -d ".deploy/remote" ]; then
-  	mkdir -p .deploy/remote
+  if [ ! -d ".deploy/remote/$REMOTEINDEX" ]; then
+  	mkdir -p .deploy/remote/$REMOTEINDEX
 	fi
 
 fi
@@ -136,20 +159,19 @@ if [ -n "$2" ]; then
 	  REMOTEPATH="$REMOTEPATH/"
 	fi
 
-	if [ "$REMOTETYPE" = "local"] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
+	if [ "$REMOTETYPE" = "local" ] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
 		echo "Local and remote site are in the same place."
 		exit
 	fi
 		
 fi
 
+#. deploy-typo3
+#. deploy-drupal7
 
-. deploy-typo3
-#source deploy-drupal7
-
-if [ -n "$REMOTETITLE" ]
+if [ -n "$REMOTETITLE" ] && [ "$1" != "remote" ]
 then
-  echo Remote host : $REMOTETITLE
+  echo "On remote $REMOTETITLE"
 fi
 
 if [ $handled ]; then
@@ -167,8 +189,13 @@ case "$1" in
         exit 1
       fi
       cp -f .deploy-$CONFIG.cnf .deploy.cnf
-      . .deploy.cnf
-      echo Switched to remote $REMOTETITLE
+      . $LOCALROOT/.deploy.cnf
+      if [ $REMOTEINDEX != $CONFIG ]
+      then
+        echo Naming mismatch
+        exit 1
+      fi
+      echo "Now on remote $REMOTETITLE"
     fi
     ;;
   "config" )
@@ -194,7 +221,7 @@ case "$1" in
         fi
         if [ -d $LOCALPATH ]
         then
-          rsync -avnci $LOCALPATH $REMOTEROOT$REMOTEPATH | grep ">f" | sed $RSYNCCOLORSED
+          rsync -avnci $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep ">f" | sed $RSYNCCOLORSED
         fi
 
       ;;
@@ -215,20 +242,20 @@ case "$1" in
       ;;
 
       "ftp" )
-        cd .deploy/remote
+        cd .deploy/remote/$REMOTEINDEX
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
-        cd ../..
+        cd ../../..
         if [ -f $LOCALPATH ]
         then
           echo "Blue lines are added on local - red are removed"
           # do an actual diff on two files
-          diff -w -u $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed $DIFFCOLORSED
+          diff -w -u $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
           # diff structures using rsync
           echo "Blue lines are changed or added on local."
-          rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
+          rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
 
         fi
 
@@ -310,19 +337,14 @@ case "$1" in
     esac
     ;;
   "downdb" )
-    if [ $REMOTETYPE != "ssh" ]
-    then
-      echo "SSH mode only."
-      exit 1;
-    fi
-
+    require_ssh
     DUMPPATH="$LOCALSITENAME-remote.sql"
     # dump remote db
     ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
     # download result
     scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
     # import
-    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < ./$DUMPPATH
+#    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < ./$DUMPPATH
     ;;
 
   "dumplocaldb" )
@@ -341,26 +363,13 @@ case "$1" in
     ;;
 
   "dumpremotedb" )
-    if [ $REMOTETYPE != "ssh"]
-    then echo "SSH mode only."; exit 1;
-    fi
-
-    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb"; exit 1;
-    fi
-    DUMPPATH="$LOCALSITENAME-remote.sql"
-    ignoretables=""
-    # determine ignore-tables - this is based on type of system
-    #if [ ISTYPO3 ]; then
-    #  ignoretables=`ssh $REMOTEUSER@$REMOTEHOST 'mysql -DN $REMOTEDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}''`
-    #fi
-    ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+    remote_dumpdb
     ;;
 
-	"importlocaldb" )	  
-	  if [ ! -n "$2" ]; then echo "Usage: deploy importlocaldb <file>"; exit 1;
+  "importlocaldb" )
+    if [ ! -n "$2" ]; then echo "Usage: deploy importlocaldb <file>"; exit 1;
     fi
-		mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2		
+    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
     ;;
     
   "sqlq" )

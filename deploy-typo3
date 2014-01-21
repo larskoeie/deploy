@@ -5,7 +5,7 @@ after () {
 	local_clear_cache
 }
 
-local_clear_cache() {
+local_clear_cache () {
 	echo "Clearing cache ..."
 	
 	echo "TRUNCATE cache_treelist; TRUNCATE cache_pagesection; TRUNCATE cache_hash; TRUNCATE cache_pages;" > deploy-temp.sql
@@ -41,62 +41,66 @@ if [ -d "http/typo3conf" ]; then
 fi
 
 
-if [ $ISTYPO3 ] && [ !-z $LOCALDBPASSWORD ]; then
-	php_code=$(cat <<-'EOF' 
-		error_reporting(E_ERROR | E_PARSE);
-		$_EXTKEY = "cms";
-		include(getcwd() . "/http/typo3/sysext/" . $_EXTKEY . "/ext_emconf.php"); 
-		$t3_version = $EM_CONF["cms"]["version"];
-	
-		$conffile = getcwd() . "/http/typo3conf/localconf.php";
-		if (is_file($conffile)) {
-			include($conffile); 
-			$db_host = $typo_db_host;
-			$db_username = $typo_db_username;
-			$db_password = $typo_db_password;
-			$db_db = $typo_db;	
-		} else {
-			$conffile = getcwd() . "/http/typo3conf/LocalConfiguration.php";
-			if (is_file($conffile)) {
-				$c= (include($conffile)); 
-				$db_host = $c["DB"]["host"];
-				$db_username = $c["DB"]["username"];
-				$db_password = $c["DB"]["password"];
-				$db_db = $c["DB"]["database"];	
-			}
-		
-		}	
-		echo implode(";", array(
-			$t3_version,
-			$db_host,
-			$db_username,
-			$db_password,
-			$db_db
-		));
-
-EOF
-)
-
-	php_cwd=`/usr/bin/php -r "$php_code"`
-	
-	CONFIG=$php_cwd
-	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
-	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
-	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
-	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
-	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
-	echo "Local DB host : $LOCALDBHOST"
-
-#php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
-#/usr/bin/php -r "print_r($_SERVER)"
-#EOF
-
-#		echo $php_cwd
-	
-	
-	
+if [ $ISTYPO3 ]; then
+  if [ ! -z $LOCALDBPASSWORD ]; then
+  echo '123'
+  	php_code=$(cat <<-'EOF' 
+  		error_reporting(E_ERROR | E_PARSE);
+  		$_EXTKEY = "cms";
+  		include(getcwd() . "/http/typo3/sysext/" . $_EXTKEY . "/ext_emconf.php"); 
+  		$t3_version = $EM_CONF["cms"]["version"];
+  	
+  		$conffile = getcwd() . "/http/typo3conf/localconf.php";
+  		if (is_file($conffile)) {
+  			include($conffile); 
+  			$db_host = $typo_db_host;
+  			$db_username = $typo_db_username;
+  			$db_password = $typo_db_password;
+  			$db_db = $typo_db;	
+  		} else {
+  			$conffile = getcwd() . "/http/typo3conf/LocalConfiguration.php";
+  			if (is_file($conffile)) {
+  				$c= (include($conffile)); 
+  				$db_host = $c["DB"]["host"];
+  				$db_username = $c["DB"]["username"];
+  				$db_password = $c["DB"]["password"];
+  				$db_db = $c["DB"]["database"];	
+  			}
+  		
+  		}	
+  		echo implode(";", array(
+  			$t3_version,
+  			$db_host,
+  			$db_username,
+  			$db_password,
+  			$db_db
+  		));
+  
+  EOF
+  )
+  
+  	php_cwd=`/usr/bin/php -r "$php_code"`
+  	
+  	CONFIG=$php_cwd
+  	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
+  	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
+  	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
+  	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
+  	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+  	echo $php_code
+  	echo "Local DB host : $LOCALDBHOST"
+  
+  #php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
+  #/usr/bin/php -r "print_r($_SERVER)"
+  #EOF
+  
+  #		echo $php_cwd
+  	
+  	
+  	
+  fi
 fi
-
+  
 if [ $handled ]
 then 
 	exit; 
@@ -170,6 +174,7 @@ case "$1" in
 		fi
 	;;
 
+  
 esac
 
 
