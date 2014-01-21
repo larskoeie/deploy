@@ -1,5 +1,7 @@
 #!/bin/sh
 
+
+# multiconfig
 #
 # - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
 #
