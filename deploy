@@ -6,6 +6,58 @@
 # - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
 #
 
+read_config () {
+  REMOTEINDEX=""
+  if [ -f .deploy.state ]; then
+    f=`cat .deploy.state | cut -d = -f 1`
+    v=`cat .deploy.state | cut -d = -f 2`
+    if [ "$f" = "remote" ]; then
+      REMOTEINDEX=$v
+    fi
+  fi
+  if [ -f .deploy.cnf ]
+  then
+    while read p; do
+      f=`echo $p | cut -d = -f 1`
+      r=`echo $f | cut -d . -f 1`
+      field=`echo $f | cut -d . -f 2`
+      value=`echo $p | cut -d = -f 2`
+
+      if [ "$r" = "local" ];
+      then
+        case $field in
+          "dbhost" ) LOCALDBHOST=$value ;;
+          "dbuser" ) LOCALDBUSER=$value ;;
+          "db" ) LOCALDB=$value ;;
+        esac
+        
+      else
+        if [ -z "$REMOTEINDEX" ]; then 
+          REMOTEINDEX=$r
+          write_state
+        fi
+      fi
+      if [ "$r" = "$REMOTEINDEX" ];
+      then
+        case $field in
+          "type" ) REMOTETYPE=$value ;;
+          "title" ) REMOTETITLE=$value ;;
+          "host" ) REMOTEHOST=$value ;;
+          "user" ) REMOTEUSER=$value ;;
+          "root" ) REMOTEROOT=$value ;;
+          "httpfolder" ) REMOTEHTTPFOLDER=$value ;;
+          "dbhost" ) REMOTEDBHOST=$value ;;
+          "dbuser" ) REMOTEDBUSER=$value ;;
+          "db" ) REMOTEDB=$value ;;
+        esac      
+      fi
+    done < .deploy.cnf
+  fi
+}
+write_state () {
+  echo "remote=$REMOTEINDEX" > .deploy.state  
+}
+
 require_remote () {
   if [ ! $REMOTEROOT ]
   then
@@ -93,15 +145,7 @@ if [ ! -d "http" ]; then echo "Not site root.";
   exit 1;
 fi
 
-# load site configuration
-if [ -f "$LOCALROOT/.deploy.cnf" ]
-then 
-  . $LOCALROOT/.deploy.cnf
-else
-  echo "No .deploy.cnf."; 
-  exit;
-fi
-
+read_config
 
 # unset passwords
 REMOTEPASSWORD=""
@@ -109,7 +153,6 @@ LOCALDBPASSWORD=""
 REMOTEDBPASSWORD=""
 # some var initialization
 LOCALSITENAME=`basename $LOCALROOT`
-REMOTESITENAME=`basename $REMOTEROOT`
 TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
@@ -182,26 +225,15 @@ fi
 
 case "$1" in
   "remote" )
-    CONFIG=$2
-    if [ -n "$CONFIG" ]; 
-    then
-      if [ ! -f .deploy-$CONFIG.cnf ]
-      then
-        echo No config file .deploy-$CONFIG.cnf
-        exit 1
-      fi
-      cp -f .deploy-$CONFIG.cnf .deploy.cnf
-      . $LOCALROOT/.deploy.cnf
-      if [ $REMOTEINDEX != $CONFIG ]
-      then
-        echo Naming mismatch
-        exit 1
-      fi
-      echo "Now on remote $REMOTETITLE"
+    if [ ! -n "$2" ]; then echo "Usage: deploy remote <remote>"; exit 1; 
     fi
+    REMOTEINDEX=$2
+    write_state
+    read_config
+    echo "Switched to remote $REMOTETITLE"
     ;;
   "config" )
-    cat .deploy.cnf
+    echo "Remote host : $REMOTEHOST"
     ;;
   "diff" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
