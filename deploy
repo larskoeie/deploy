@@ -54,6 +54,7 @@ read_config () {
     done < .deploy.cnf
   fi
 }
+
 write_state () {
   echo "remote=$REMOTEINDEX" > .deploy.state  
 }
@@ -116,6 +117,8 @@ REMOTETITLE=""
 
 USAGE="Usage: deploy <command> [path]
   General commands :
+    config
+      Output current configuration.
     diff
       Show files and folders in specified path on local that are not on remote or have different size or timestamp
     diffdb
@@ -130,6 +133,8 @@ USAGE="Usage: deploy <command> [path]
       Dump the remote db to local file. Not on FTP mode.
     up
       Upload the specified path from local to remote
+    remote
+      Switch remote.
 ";
 
 #. deploy-typo3
@@ -225,12 +230,31 @@ fi
 
 case "$1" in
   "remote" )
-    if [ ! -n "$2" ]; then echo "Usage: deploy remote <remote>"; exit 1; 
+    if [ ! -n "$2" ]; then 
+    
+    echo "Usage: deploy remote <remote>"; 
+    if [ -f .deploy.cnf ]
+      then
+        while read p; do
+          f=`echo $p | cut -d = -f 1`
+          r=`echo $f | cut -d . -f 1`
+          field=`echo $f | cut -d . -f 2`
+          value=`echo $p | cut -d = -f 2`
+      
+          if [ "$r" = "$REMOTEINDEX" ];
+          then
+            echo " * $r"
+          else
+            echo "   $r"
+          fi
+        done < .deploy.cnf
+      fi
+    else    
+      REMOTEINDEX=$2
+      write_state
+      read_config
+      echo "Switched to remote $REMOTETITLE"
     fi
-    REMOTEINDEX=$2
-    write_state
-    read_config
-    echo "Switched to remote $REMOTETITLE"
     ;;
   "config" )
     echo "Remote host : $REMOTEHOST"
