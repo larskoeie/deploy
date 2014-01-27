@@ -1,11 +1,12 @@
 #!/bin/sh
-
-
-# multiconfig
 #
 # - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
 #
 
+#
+# Reads state variables. 
+# Reads config file (.deploy.cnf) and apply values to global variables for later use.
+#
 read_config () {
   REMOTEINDEX=""
   if [ -f .deploy.state ]; then
@@ -30,11 +31,11 @@ read_config () {
           "dbuser" ) LOCALDBUSER=$value ;;
           "db" ) LOCALDB=$value ;;
         esac
-        
       else
-        if [ -z "$REMOTEINDEX" ]; then 
+        if [ -z "$REMOTEINDEX" ]; then
           REMOTEINDEX=$r
           write_state
+          echo "Remote not set. Switched to $REMOTEINDEX"
         fi
       fi
       if [ "$r" = "$REMOTEINDEX" ];
@@ -49,16 +50,22 @@ read_config () {
           "dbhost" ) REMOTEDBHOST=$value ;;
           "dbuser" ) REMOTEDBUSER=$value ;;
           "db" ) REMOTEDB=$value ;;
-        esac      
+        esac
       fi
     done < .deploy.cnf
   fi
 }
 
+#
+# Write state variables to file.
+#
 write_state () {
-  echo "remote=$REMOTEINDEX" > .deploy.state  
+  echo "remote=$REMOTEINDEX" > .deploy.state
 }
 
+#
+# Make sure that configuration for remote site exists. This is required for most commands.
+#
 require_remote () {
   if [ ! $REMOTEROOT ]
   then
@@ -84,6 +91,9 @@ require_remote () {
   esac
 }
 
+#
+# Make sure that SSH connection to remote exists.
+#
 require_ssh () {
   if [ $REMOTETYPE != "ssh" ]; then
     echo "SSH mode only."
@@ -91,28 +101,89 @@ require_ssh () {
   fi
 }
 
-remote_dumpdb () {
-   require_ssh
-    if [ ! -n "$REMOTEDB" ]; then echo "Missing remotedb"; exit 1;
-    fi
-    DUMPPATH="$LOCALSITENAME-remote.sql"
-    ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+#
+# Make sure that configuration for the local DB exists.
+#
+require_localdb () {
+  if [ -z $LOCALDB ]; then echo "No local DB configured."; exit 1;
+  fi
 }
 
+#
+# Make sure that configuration for a remote DB exists.
+#
+require_remotedb () {
+ if [ ! -n "$REMOTEDB" ]; then echo "No remote DB configured."; exit 1;
+ fi
+}
 
-# Absolute path to this script. /home/user/bin/foo.sh
+#
+# Dump remote DB to file and download the file.
+#
+remote_dumpdb () {
+  require_ssh
+  require_remotedb
+  DUMPPATH="$REMOTEINDEX.sql"
+  echo "Dumping $REMOTEDB on $REMOTEDBUSER@$REMOTEDBHOST ..."
+  ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
+  echo "Downloading dump ..."
+  scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+}
+
+#
+# Dump local DB to file.
+#
+local_dumpdb () {
+  require_localdb
+  DUMPPATH="local.sql"
+  # --skip-extended-insert makes dump larger, but provides better results with diff later on
+  echo "Dumping DB $LOCALDB on $LOCALDBHOST ..."
+  mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB > $DUMPPATH
+}
+
+#
+# Import dump from remote site to local DB
+#
+local_importremotedb () {
+  require_localdb
+  echo "Importing file $REMOTEINDEX.sql ..."
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $REMOTEINDEX.sql
+}
+
+#
+# Execute SQL query on local DB.
+#
+local_sqlq () {	
+  echo $1 > deploy-temp.sql;
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql	
+}
+
+# 
+# Executes SQL query on DB.
+#
+sqlq () {
+	# for now, pass query on to local DB
+	local_sqlq "$1"
+}
+
+# Absolute path to this script
 SCRIPT=$(readlink -f $0)
-# Absolute path this script is in. /home/user/bin
+# Absolute path this script is in
 SCRIPTPATH=`dirname $SCRIPT`
+# The current working directory
 LOCALROOT=`pwd`
 
 # apply sane config default values
 LOCALHTTPFOLDER="http/"
 REMOTEHTTPFOLDER="http/"
-REMOTEINDEX="default"
+REMOTEINDEX=""
 REMOTETYPE="ssh" # "local", "ssh" or "ftp"
 REMOTETITLE=""
+LOCALSITENAME=`basename $LOCALROOT`
+TIME=`date +"%y%m%d"`
+DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
+EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 
 
 USAGE="Usage: deploy <command> [path]
@@ -137,39 +208,48 @@ USAGE="Usage: deploy <command> [path]
       Switch remote.
 ";
 
+#
+# Source system specific scripts. These script have responsibility for only invoking if appropriate.
+#
 #. deploy-typo3
-#. deploy-drupal7
+. deploy-drupal7
 
-if [ ! -n "$1" ]; then 
-	echo "$USAGE"
-  exit 1;
+# If no command, show usage
+if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
 fi
 
 # check if in site root (one above http/)
-if [ ! -d "http" ]; then echo "Not site root."; 
-  exit 1;
+if [ ! -d "http" ]; then echo "Not site root."; exit 1;
 fi
 
+# read and parse the config file
 read_config
 
-# unset passwords
-REMOTEPASSWORD=""
-LOCALDBPASSWORD=""
-REMOTEDBPASSWORD=""
-# some var initialization
-LOCALSITENAME=`basename $LOCALROOT`
-TIME=`date +"%y%m%d"`
-DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
-EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 
+#
+# Reads a password from prompt. Show *'s
+#
+read_pw () {
+  unset pw
+  while IFS=`read -s -p "Enter :$prompt" -r char`
+  do
+    if [ "$char" = $'\0' ]
+    then
+      break
+    fi
+    prompt='*'
+    pw="$pw$char"
+  done
+  echo
+  return $pw
+}
 
 if [ "$REMOTETYPE" = "ftp" ]; then
   unset REMOTEPASSWORD
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
   while IFS= read -p "$prompt" -r -s -n 1 char
   do
-      if [[ $char == $'\0' ]]
+      if [ $char = $'\0' ]
       then
           break
       fi
@@ -179,30 +259,30 @@ if [ "$REMOTETYPE" = "ftp" ]; then
   echo
   if [ ! -d ".deploy/remote/$REMOTEINDEX" ]; then
   	mkdir -p .deploy/remote/$REMOTEINDEX
-	fi
+  fi
 
 fi
 
+# Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
 if [ -n "$2" ]; then
-	
-	# remove slashes from httpfolder
+	# remove trailing slashes from all vars
 	REMOTEROOT=`echo $REMOTEROOT | sed "s/\/*$//g"` 
 	LOCALHTTPFOLDER=`echo $LOCALHTTPFOLDER | sed "s/\/*$//g"` 
 	REMOTEHTTPFOLDER=`echo $REMOTEHTTPFOLDER | sed "s/\/*$//g"` 
 
+	# make paths
 	LOCALPATH=$2
-	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`
+	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`  
+
+	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"` 
+	REMOTEPATH=`echo $REMOTEPATH | sed "s/\/*$//g"` 
 
 	# add trailing slashes
 	LOCALROOT="$LOCALROOT/"
 	REMOTEROOT="$REMOTEROOT/"
 	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"	
 	REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"	
-
-	# remove any trailing slash
-	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"` 
-	REMOTEPATH=`echo $REMOTEPATH | sed "s/\/*$//g"` 
-
+	
 	# if path on local is a directory, add trailing slash, on local AND on remote
 	if [ -d "$LOCALPATH" ]; then
 	  LOCALPATH="$LOCALPATH/"
@@ -213,7 +293,6 @@ if [ -n "$2" ]; then
 		echo "Local and remote site are in the same place."
 		exit
 	fi
-		
 fi
 
 #. deploy-typo3
@@ -228,10 +307,13 @@ if [ $handled ]; then
   exit 0;
 fi
 
+#
+# Now go to action
+#
 case "$1" in
   "remote" )
     if [ ! -n "$2" ]; then 
-    
+
     echo "Usage: deploy remote <remote>"; 
     if [ -f .deploy.cnf ]
       then
@@ -240,7 +322,7 @@ case "$1" in
           r=`echo $f | cut -d . -f 1`
           field=`echo $f | cut -d . -f 2`
           value=`echo $p | cut -d = -f 2`
-      
+
           if [ "$r" = "$REMOTEINDEX" ];
           then
             echo " * $r"
@@ -249,24 +331,34 @@ case "$1" in
           fi
         done < .deploy.cnf
       fi
-    else    
+    else
       REMOTEINDEX=$2
       write_state
       read_config
       echo "Switched to remote $REMOTETITLE"
     fi
     ;;
+ 
   "config" )
-    echo "Remote host : $REMOTEHOST"
+    echo "Local DB host  : $LOCALDBHOST"
+    echo "Local DB user  : $LOCALDBUSER"
+    echo "Local DB       : $LOCALDB"
+    echo "Remote host    : $REMOTEHOST"
+    echo "Remote user    : $REMOTEUSER"
+    echo "Remote root    : $REMOTEROOT"
+    echo "Remote DB host : $REMOTEDBHOST"
+    echo "Remote DB user : $REMOTEDBUSER"
+    echo "Remote DB      : $REMOTEDB"
     ;;
+ 
+  #
+  # Will make a rsync dry-run or a diff depending on type of localpath.
+  #
   "diff" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
     fi
 
-    if [ -f $LOCALPATH ]
-    then
-      echo -n "Local file :  ";
-      ls -l $LOCALPATH
+    if [ -f $LOCALPATH ]; then echo -n "Local file :  "; ls -l $LOCALPATH
     fi
     
     case "$REMOTETYPE" in
@@ -276,9 +368,7 @@ case "$1" in
           echo -n "Remote file : "
           ls -l $REMOTEROOT$REMOTEPATH
           diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
-        fi
-        if [ -d $LOCALPATH ]
-        then
+        else
           rsync -avnci $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep ">f" | sed $RSYNCCOLORSED
         fi
 
@@ -292,10 +382,9 @@ case "$1" in
         fi
         if [ -d $LOCALPATH ]
         then
-          # diff structures using rsync
+          # diff folder structure using rsync dry-run
           echo "Blue lines are changed or added on local - red are removed."
           rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
-
         fi
       ;;
 
@@ -323,8 +412,8 @@ case "$1" in
 
   "diffdb" )
     # do a diff on the two db-dump files
-    LOCAL="$LOCALSITENAME-local.sql"
-    REMOTE="$LOCALSITENAME-remote.sql"
+    LOCAL="local.sql"
+    REMOTE="$REMOTEINDEX.sql"
 
     if [ ! -f $LOCAL ]
       then echo "no local dump - use dumplocaldb"; exit;
@@ -387,24 +476,17 @@ case "$1" in
         rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
       "ftp" )
-        cd .deploy/remote
+        cd .deploy/remote/$REMOTEINDEX
         wget -r -nH ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
-        cd ../..
-        rsync -avi $EXCLUDEFROM .deploy/remote$REMOTEROOT$REMOTEPATH $LOCALPATH
+        cd ../../..
+        rsync -avi $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
     esac
     ;;
   "downdb" )
-    require_ssh
-    DUMPPATH="$LOCALSITENAME-remote.sql"
-    # dump remote db
-    ssh $REMOTEUSER@$REMOTEHOST "mysqldump -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > temp.sql"
-    # download result
-    scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
-    # import
-#    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < ./$DUMPPATH
+    remote_dumpdb
+    local_importremotedb
     ;;
-
   "dumplocaldb" )
     # this dump is specifically with diff in mind
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
@@ -424,20 +506,10 @@ case "$1" in
     remote_dumpdb
     ;;
 
-  "importlocaldb" )
-    if [ ! -n "$2" ]; then echo "Usage: deploy importlocaldb <file>"; exit 1;
-    fi
-    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
-    ;;
-    
   "sqlq" )
     if [ ! -n "$2" ]; then echo "Usage: deploy sqlq <sql>"; exit 1;
     fi
-		if [ ! -n "$LOCALDB" ]; then echo "Missing localdb"; exit 1;
-    fi
-		
-    echo $2 > deploy-temp.sql;
-    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+    sqlq "$2"
 
     ;;
   "up" )
@@ -475,11 +547,16 @@ case "$1" in
     tar -cvfz $DUMPPATH.tar.gz $LOCALPATH
     ;;
 
-  "dumpremote" )
-
+  "importlocaldb" )
+    require_localdb
+    if [ -z $2 ]; then
+      echo "Usage: deploy importlocaldb <file>"
+      exit 1;
+    fi
+    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
     ;;
 esac
 
-if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
-fi
+#if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
+#fi
 
