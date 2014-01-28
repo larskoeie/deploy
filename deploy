@@ -64,6 +64,13 @@ write_state () {
 }
 
 #
+# Require that the current directory is the one above http/
+require_site_root () {
+  if [ ! -d "http" ]; then echo "Not site root."; exit 1;
+  fi
+}
+
+#
 # Make sure that configuration for remote site exists. This is required for most commands.
 #
 require_remote () {
@@ -137,7 +144,7 @@ local_dumpdb () {
   require_localdb
   DUMPPATH="local.sql"
   # --skip-extended-insert makes dump larger, but provides better results with diff later on
-  echo "Dumping DB $LOCALDB on $LOCALDBHOST ..."
+  echo "Dumping $LOCALDB on $LOCALDBUSER@$LOCALDBHOST ..."
   mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB > $DUMPPATH
 }
 
@@ -155,7 +162,7 @@ local_importremotedb () {
 #
 local_sqlq () {	
   echo $1 > deploy-temp.sql;
-  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql	
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
 }
 
 # 
@@ -218,13 +225,8 @@ USAGE="Usage: deploy <command> [path]
 if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
 fi
 
-# check if in site root (one above http/)
-if [ ! -d "http" ]; then echo "Not site root."; exit 1;
-fi
-
-# read and parse the config file
+require_site_root
 read_config
-
 
 #
 # Reads a password from prompt. Show *'s
@@ -378,7 +380,7 @@ case "$1" in
         then
           echo "Blue lines are added on local - red are removed"
           # do an actual diff on two files
-          ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+          ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
@@ -402,7 +404,7 @@ case "$1" in
         then
           # diff structures using rsync
           echo "Blue lines are changed or added on local."
-          rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed "s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
+          rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
         fi
 
@@ -423,36 +425,45 @@ case "$1" in
     fi
 
     diff $LOCAL $REMOTE | sed $DIFFCOLORSED
-    ;;
-
+  ;;
+ 
   # diff and grep for text within diff result
+  # TODO : remotetype ftp not implemented 
   "diffsearch" )
-    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diffsearch <path> <string>"; exit 1;
-    fi
     if [ ! -n "$3" ]; then echo "Usage: deploy diffsearch <path> <string>"; exit 1;
     fi
 
     echo "Diffing '$LOCALPATH' and searching for '$3' ...";
+    echo "Blue lines are added on local - red are removed"
 
-    if [ -f $LOCALPATH ]
-    then
-      echo "Blue lines are added on local - red are removed"
-      # do an actual diff on two files
-      ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | grep $3 | sed 's/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-    fi
-    if [ -d $LOCALPATH ]
-    then
-      echo "Changed files :"
-      # diff structures using rsync
-      rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3
-
-    fi
-    ;;
+    case "$REMOTETYPE" in 
+      "local" )
+        if [ -f $LOCALPATH ]; then
+          diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | grep $3 | sed $DIFFCOLORSED
+        fi
+        if [ -d $LOCALPATH ]; then
+          rsync -avnc $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
+        fi
+      ;;
+      
+      "ssh" )
+        if [ -f $LOCALPATH ]; then
+          ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | grep $3 | sed $DIFFCOLORSED
+        fi
+        if [ -d $LOCALPATH ]; then
+          rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
+        fi
+      ;;
+      
+      "ftp" )
+      ;;
+    esac  
+  ;;
   "down" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1;
     fi
 
-    # check if "http/" is owned by the current user. If not, downloading files, will probably cause trouble. Confirm.
+    # check if "http/" is owned by the current user. If not, downloading files will probably cause trouble. Confirm.
     HTTPOWNER=$(stat -c %U http)
     if [ $HTTPOWNER != $(id -u -n) ]; then
       echo "You are not $HTTPOWNER. Continue? y/n";
@@ -515,6 +526,13 @@ case "$1" in
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
+    echo -n "This will upload $LOCALPATH to $REMOTETITLE. Continue? y/n : ";
+    read -r c
+    if [ "$c" != "y" ]
+    then
+      echo "Aborted";
+      exit;
+    fi
 
     echo "Uploading $LOCALPATH ...";
     case $REMOTETYPE in 
@@ -525,8 +543,8 @@ case "$1" in
         rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
       ;;
       "ftp" )
-        rsync -avnic $EXCLUDEFROM $LOCALPATH .deploy/remote$REMOTEROOT$REMOTEPATH
-        cd .deploy/remote
+        rsync -avnic $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH
+        cd .deploy/remote/$REMOTEINDEX
 #        echo  <<EOF
 #open $REMOTEHOST
 #user $REMOTEUSER $REMOTEPASSWORD

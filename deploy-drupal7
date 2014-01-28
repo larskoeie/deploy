@@ -112,6 +112,35 @@ case "$1" in
     sqlq "update system set status=0 where name='$2'";
   ;;
   
+  "watchdog-tail" )
+    while true
+    do
+      clear      
+      q=`sqlq "select type, message, variables, severity, link, location, timestamp from watchdog order by timestamp desc limit 15" `
+			php_code=$(cat <<-'EOF' 
+		$e=array_reverse(explode("\n", $argv[1]));
+		
+		array_pop($e);
+		foreach ($e as $i) {
+		  list($type, $message, $variables, $severity, $link, $location, $timestamp) = explode("\t", $i);	
+		  $variables = unserialize($variables);
+		  #print_r($variables);
+		  if (is_array($variables))
+		  	print implode("\n    ", array(
+		  	  strftime('%d.%m.%Y %H.%M', $timestamp) . ' : ' . $type,
+		  		substr(str_replace(array_keys($variables), $variables, $message), 0, 100),
+		  	  $location,
+		  	)) . "\n";
+		}
+		EOF
+		)
+	php_cwd=`/usr/bin/php -r "$php_code" "$q"`
+
+      echo "$php_cwd"
+      sleep 1
+    done
+    
+  ;;
 esac
 
 
