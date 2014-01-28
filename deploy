@@ -314,9 +314,9 @@ fi
 #
 case "$1" in
   "remote" )
-    if [ ! -n "$2" ]; then 
-
-    echo "Usage: deploy remote <remote>"; 
+    if [ ! -n "$2" ]; then
+      echo "Usage: deploy remote <remote>";
+    fi
     if [ -f .deploy.cnf ]
       then
         while read p; do

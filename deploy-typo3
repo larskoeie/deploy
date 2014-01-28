@@ -40,6 +40,7 @@ if [ -d "http/typo3conf" ]; then
 	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-typo3.txt"
 fi
 
+<<<<<<< HEAD
 
 if [ $ISTYPO3 ]; then
   if [ ! -z $LOCALDBPASSWORD ]; then
@@ -105,6 +106,51 @@ if [ $handled ]
 then 
 	exit; 
 fi	
+=======
+if [ $ISTYPO3 -eq 1 ]; then
+	php_code=$(cat <<-'EOF' 
+		$_EXTKEY = 'cms';
+		include(getcwd() . '/http/typo3/sysext/' . $_EXTKEY . '/ext_emconf.php'); 
+		$t3_version = $EM_CONF['cms']['version'];
+	
+		$conffile = getcwd() . '/http/typo3conf/localconf.php';
+		if (is_file($conffile)) {
+			include($conffile); 
+			$db_host = $typo_db_host;
+			$db_username = $typo_db_username;
+			$db_password = $typo_db_password;
+			$db_db = $typo_db;	
+		} else {
+			$conffile = getcwd() . '/http/typo3conf/LocalConfiguration.php';
+			if (is_file($conffile)) {
+				$c= (include($conffile)); 
+				$db_host = $c['DB']['host'];
+				$db_username = $c['DB']['username'];
+				$db_password = $c['DB']['password'];
+				$db_db = $c['DB']['database'];	
+			}
+		
+		}	
+		echo implode(";", array(
+			$t3_version,
+			$db_host,
+			$db_username,
+			$db_password,
+			$db_db,
+		));
+EOF
+)
+
+	php_cwd=`/usr/bin/php -r "$php_code"`
+	
+	CONFIG=$php_cwd
+	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
+	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
+	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
+	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
+	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+fi
+>>>>>>> 4004b3a90c0400859a1e523120c97732015da9e0
 	
 case "$1" in 
 	"cc" )
