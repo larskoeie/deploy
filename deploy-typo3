@@ -40,75 +40,9 @@ if [ -d "http/typo3conf" ]; then
 	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-typo3.txt"
 fi
 
-<<<<<<< HEAD
-
-if [ $ISTYPO3 ]; then
-  if [ ! -z $LOCALDBPASSWORD ]; then
-  echo '123'
-  	php_code=$(cat <<-'EOF' 
-  		error_reporting(E_ERROR | E_PARSE);
-  		$_EXTKEY = "cms";
-  		include(getcwd() . "/http/typo3/sysext/" . $_EXTKEY . "/ext_emconf.php"); 
-  		$t3_version = $EM_CONF["cms"]["version"];
-  	
-  		$conffile = getcwd() . "/http/typo3conf/localconf.php";
-  		if (is_file($conffile)) {
-  			include($conffile); 
-  			$db_host = $typo_db_host;
-  			$db_username = $typo_db_username;
-  			$db_password = $typo_db_password;
-  			$db_db = $typo_db;	
-  		} else {
-  			$conffile = getcwd() . "/http/typo3conf/LocalConfiguration.php";
-  			if (is_file($conffile)) {
-  				$c= (include($conffile)); 
-  				$db_host = $c["DB"]["host"];
-  				$db_username = $c["DB"]["username"];
-  				$db_password = $c["DB"]["password"];
-  				$db_db = $c["DB"]["database"];	
-  			}
-  		
-  		}	
-  		echo implode(";", array(
-  			$t3_version,
-  			$db_host,
-  			$db_username,
-  			$db_password,
-  			$db_db
-  		));
-  
-  EOF
-  )
-  
-  	php_cwd=`/usr/bin/php -r "$php_code"`
-  	
-  	CONFIG=$php_cwd
-  	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
-  	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
-  	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
-  	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
-  	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
-  	echo $php_code
-  	echo "Local DB host : $LOCALDBHOST"
-  
-  #php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
-  #/usr/bin/php -r "print_r($_SERVER)"
-  #EOF
-  
-  #		echo $php_cwd
-  	
-  	
-  	
-  fi
-fi
-  
-if [ $handled ]
-then 
-	exit; 
-fi	
-=======
 if [ $ISTYPO3 -eq 1 ]; then
 	php_code=$(cat <<-'EOF' 
+		error_reporting(E_ERROR | E_PARSE);
 		$_EXTKEY = 'cms';
 		include(getcwd() . '/http/typo3/sysext/' . $_EXTKEY . '/ext_emconf.php'); 
 		$t3_version = $EM_CONF['cms']['version'];
@@ -150,7 +84,6 @@ EOF
 	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
 	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
 fi
->>>>>>> 4004b3a90c0400859a1e523120c97732015da9e0
 	
 case "$1" in 
 	"cc" )
@@ -204,21 +137,35 @@ case "$1" in
 		;;		
 
 	"users-disable-except" )
-		if [ ISTYPO3 ]; then				
-			username=$2
-			if [ ! -n "$username" ]; then echo "Usage : deploy users-disable-except <except-username>"; exit 1;
-			fi
-			
-			echo "update be_users set disable=1 where username != '$username';" > deploy-temp.sql
-			
-		fi
-		if [ -f deploy-temp.sql ]; then
-			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
-			echo "All users except '$username' disabled."
-			handled=1;
-	
-		fi
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <except-username>"; exit 1;
+		fi			
+		sqlq "update be_users set disable=1 where username != '$username';" > deploy-temp.sql
+		handled=1;
 	;;
+	
+	"users-disable-emails" )
+	;;
+	
+	"user-disable" | "ublk" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+		sqlq "update be_users set disable=1 where username='$2'"
+	;;
+	
+	"user-enable" |	"uublk" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+		sqlq "update be_users set disable=0 where username='$2'"
+	;;
+	
+	"user-password" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+ 		sqlq "update be_users set password=1 where username='$2'"
+
+	;;
+	
+	
 
   
 esac

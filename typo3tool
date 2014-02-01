@@ -1,0 +1,76 @@
+#!/bin/sh
+
+#
+# Shell script for TYPO3, heavily inspired by Drush
+#
+#
+
+#
+
+USAGE="Usage: $0 <command> [path]
+  General commands :
+    make <version>
+      Make a TYPO3 site in current directory.
+    
+";
+
+# If no command, show usage
+if [ -z "$1" ]; then echo "$USAGE"; exit 1;
+fi
+
+
+case "$1" in 
+	"cc" )
+		if [ -z "$VERSION" ]; then echo "Usage : $0 $1 <all|config>"; exit 1;
+		fi
+	
+		case "$2" in
+		  "all" )
+		  ;;
+		  
+		  "config" )
+		  ;;
+		esac		
+		;;
+		
+	"make" )	
+		VERSION=$2
+		if [ -z "$VERSION" ]; then echo "Usage : $0 $1 <version>"; exit 1;
+		fi
+		
+		if [ -d typo3 ]; then echo "There is already a TYPO3 site here. Overwrite ?"; exit 1;
+		fi
+		
+		if [ ! -d .typo3tool ]; then mkdir .typo3tool
+		fi		
+		cd .typo3tool
+		wget "http://prdownloads.sourceforge.net/typo3/typo3_src-$VERSION.tar.gz"
+		cd ..
+		tar -zxvf .typo3tool/typo3_src-$VERSION.tar.gz
+		rm -rf .typo3tool
+		ln -s typo3_src-$VERSION typo3_src
+		ln -s typo3_src/typo3 typo3
+		ln -s typo3_src/t3lib t3lib
+		ln -s typo3_src/index.php index.php
+		if [ ! -d fileadmin ]; then mkdir fileadmin 
+		fi
+		if [ ! -d typo3conf ]; then mkdir typo3conf 
+		fi
+		if [ ! -d typo3temp ]; then mkdir typo3temp 
+		fi				
+	
+		touch typo3conf/ENABLE_INSTALL_TOOL
+		
+		echo "TYPO3 site has been built. Now visit it in a browser within an hour to finish."
+		handled=1	
+	  ;;
+	  	
+	"write-db-conf" )
+		
+		if [ -z "$2" ]; then echo "Usage : typo3tool $1 <db-host> <db-user> <db-password>"; exit 1;
+		fi
+		
+		;;
+
+esac
+

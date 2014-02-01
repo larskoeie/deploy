@@ -65,6 +65,7 @@ write_state () {
 
 #
 # Require that the current directory is the one above http/
+#
 require_site_root () {
   if [ ! -d "http" ]; then echo "Not site root."; exit 1;
   fi
@@ -195,31 +196,22 @@ EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 
 USAGE="Usage: deploy <command> [path]
   General commands :
-    config
-      Output current configuration.
-    diff
-      Show files and folders in specified path on local that are not on remote or have different size or timestamp
-    diffdb
-      Not on FTP mode.
-    down
-      Download the specified path from remote to local
-    downdb
-      Dump remote db to file, download file and import into local db.
-    dumplocaldb
-      Dump the local db to local file
-    dumpremotedb
-      Dump the remote db to local file. Not on FTP mode.
-    up
-      Upload the specified path from local to remote
-    remote
-      Switch remote.
+    config       Output current configuration.
+    diff         Show files and folders in specified path on local that are not on remote or have different size or timestamp
+    diffdb       Not on FTP mode.
+    down         Download the specified path from remote to local
+    downdb       Dump remote db to file, download file and import into local db.
+    dumplocaldb  Dump the local db to local file
+    dumpremotedb Dump the remote db to local file. Not on FTP mode.
+    up           Upload the specified path from local to remote
+    remote       Switch remote.
 ";
 
 #
 # Source system specific scripts. These script have responsibility for only invoking if appropriate.
-#
+# 
 #. deploy-typo3
-. deploy-drupal7
+#. deploy-drupal7
 
 # If no command, show usage
 if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
@@ -316,23 +308,23 @@ case "$1" in
   "remote" )
     if [ ! -n "$2" ]; then
       echo "Usage: deploy remote <remote>";
-    fi
-    if [ -f .deploy.cnf ]
-      then
-        while read p; do
-          f=`echo $p | cut -d = -f 1`
-          r=`echo $f | cut -d . -f 1`
-          field=`echo $f | cut -d . -f 2`
-          value=`echo $p | cut -d = -f 2`
-
-          if [ "$r" = "$REMOTEINDEX" ];
-          then
-            echo " * $r"
-          else
-            echo "   $r"
-          fi
-        done < .deploy.cnf
-      fi
+    
+	    if [ -f .deploy.cnf ]
+	    then
+	      while read p; do
+	        f=`echo $p | cut -d = -f 1`
+	        r=`echo $f | cut -d . -f 1`
+	        field=`echo $f | cut -d . -f 2`
+	        value=`echo $p | cut -d = -f 2`
+	
+	        if [ "$r" = "$REMOTEINDEX" ];
+	        then
+	          echo " * $r"
+	        else
+	          echo "   $r"
+	        fi
+	      done < .deploy.cnf
+	    fi
     else
       REMOTEINDEX=$2
       write_state
@@ -526,7 +518,7 @@ case "$1" in
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
-    echo -n "This will upload $LOCALPATH to $REMOTETITLE. Continue? y/n : ";
+    echo -n "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE. Continue? y/n : ";
     read -r c
     if [ "$c" != "y" ]
     then
