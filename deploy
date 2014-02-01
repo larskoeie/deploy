@@ -162,8 +162,7 @@ local_importremotedb () {
 # Execute SQL query on local DB.
 #
 local_sqlq () {	
-  echo $1 > deploy-temp.sql;
-  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB -e "$1"
 }
 
 # 
@@ -204,14 +203,12 @@ USAGE="Usage: deploy <command> [path]
     dumplocaldb  Dump the local db to local file
     dumpremotedb Dump the remote db to local file. Not on FTP mode.
     up           Upload the specified path from local to remote
-    remote       Switch remote.
-";
+    remote       Switch remote.";
 
 #
-# Source system specific scripts. These script have responsibility for only invoking if appropriate.
-# 
-#. deploy-typo3
-#. deploy-drupal7
+# Source system specific scripts.
+. deploy-typo3
+. deploy-drupal7
 
 # If no command, show usage
 if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
@@ -288,9 +285,6 @@ if [ -n "$2" ]; then
 		exit
 	fi
 fi
-
-#. deploy-typo3
-#. deploy-drupal7
 
 if [ -n "$REMOTETITLE" ] && [ "$1" != "remote" ]
 then
@@ -495,11 +489,6 @@ case "$1" in
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
     fi
     DUMPPATH="$LOCALSITENAME-local.sql"
-    #ignoretables=""
-    # determine ignore-tables - this is based on type of system
-    #if [ ISTYPO3 ]; then
-    #  ignoretables=`mysql -DN $LOCALDB -e "show tables like '%cache%'" | awk '{printf " --ignore-table='$LOCALDB'."$1" "}'`
-    #fi
     echo "Dumping to $DUMPPATH ..."
     # --skip-extended-insert makes dump larger, but provides better results with diff later on
     mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH

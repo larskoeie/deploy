@@ -14,9 +14,25 @@ USAGE="Usage: $0 <command> [path]
     
 ";
 
+
+#
+# Require that the current directory is http/
+#
+  dirname=`pwd`
+  dirname=`basename $dirname` 
+  if [ "$dirname" != "http" ]; then echo "Not site root."; exit 1;
+  fi
+
 # If no command, show usage
 if [ -z "$1" ]; then echo "$USAGE"; exit 1;
 fi
+
+
+#
+# Execute SQL on TYPO3 database
+typo3tool_sqlq () {	
+  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB -e "$1"
+}
 
 
 case "$1" in 
@@ -65,12 +81,69 @@ case "$1" in
 		handled=1	
 	  ;;
 	  	
-	"write-db-conf" )
-		
-		if [ -z "$2" ]; then echo "Usage : typo3tool $1 <db-host> <db-user> <db-password>"; exit 1;
+	"write-db-conf" )		
+		if [ -z "$2" ]; then echo "Usage : typo3tool $1 <db-host> <db-user> <db-password> <db-db>"; exit 1;		
 		fi
 		
+		if [ $VERSION -lt "6.0" ]; then
+		else
+		
+		fi
+		
+		
+		echo 
+		
 		;;
+		
+  "sqlq" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <sql>"; exit 1;
+		fi
+    typo3tool_sqlq $2
+    ;;  		
+	"user-create" | "ucrt" )
+		username=$2
+		if [ ! -n "$username" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+		# password is "password"
+		# tested on TYPO3 4.7
+		sqlq "insert into be_users (username, password, admin) values ('$username', '5f4dcc3b5aa765d61d8327deb882cf99', 1);" > deploy-temp.sql
+		# different salting - should work on TYPO3 6.1 - not tested
+		# echo "insert into be_users (username, password, admin) values ('admin', '', 1);" > temp.sql
+		handled=1;
 
+		echo "User '$username' created with password 'password' - please change password immediately."
+		handled=1
+		;;		
+
+	"users-disable-except" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <except-username>"; exit 1;
+		fi			
+		sqlq "update be_users set disable=1 where username != '$username';" > deploy-temp.sql
+		handled=1;
+	;;
+	
+	"users-disable-emails" )
+	;;
+	
+	"user-disable" | "ublk" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+		sqlq "update be_users set disable=1 where username='$2'"
+	;;
+	
+	"user-enable" |	"uublk" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+		sqlq "update be_users set disable=0 where username='$2'"
+	;;
+	
+	"user-password" )
+		if [ -z "$2" ]; then echo "Usage : deploy $1 <username>"; exit 1;
+		fi
+ 		sqlq "update be_users set password=1 where username='$2'"
+
+	;;
+	
+	
 esac
 
