@@ -207,6 +207,7 @@ USAGE="Usage: deploy <command> [path]
 
 #
 # Source system specific scripts.
+#
 . deploy-typo3
 . deploy-drupal7
 
@@ -238,15 +239,7 @@ read_pw () {
 if [ "$REMOTETYPE" = "ftp" ]; then
   unset REMOTEPASSWORD
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
-  while IFS= read -p "$prompt" -r -s -n 1 char
-  do
-      if [ $char = $'\0' ]
-      then
-          break
-      fi
-      prompt='*'
-      REMOTEPASSWORD+="$char"
-  done
+  read -p "$prompt" -r REMOTEPASSWORD
   echo
   if [ ! -d ".deploy/remote/$REMOTEINDEX" ]; then
   	mkdir -p .deploy/remote/$REMOTEINDEX
@@ -378,19 +371,20 @@ case "$1" in
 
       "ftp" )
         cd .deploy/remote/$REMOTEINDEX
-        wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
+        wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
         if [ -f $LOCALPATH ]
         then
           echo "Blue lines are added on local - red are removed"
           # do an actual diff on two files
-          diff -w -u $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $DIFFCOLORSED
+          diff -w -u .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
           # diff structures using rsync
           echo "Blue lines are changed or added on local."
-          rsync -avnci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          echo "-avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED"
+          rsync -avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
         fi
 
