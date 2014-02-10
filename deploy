@@ -32,7 +32,7 @@ read_config () {
           "db" ) LOCALDB=$value ;;
         esac
       else
-        if [ -z "$REMOTEINDEX" ]; then
+        if [ ! -n "$REMOTEINDEX" ]; then
           REMOTEINDEX=$r
           write_state
           echo "Remote not set. Switched to $REMOTEINDEX"
@@ -50,6 +50,7 @@ read_config () {
           "dbhost" ) REMOTEDBHOST=$value ;;
           "dbuser" ) REMOTEDBUSER=$value ;;
           "db" ) REMOTEDB=$value ;;
+          "dbdump" ) REMOTEDBDUMP=$value ;;
         esac
       fi
     done < .deploy.cnf
@@ -133,9 +134,23 @@ remote_dumpdb () {
   require_remotedb
   DUMPPATH="$REMOTEINDEX.sql"
   echo "Dumping $REMOTEDB on $REMOTEDBUSER@$REMOTEDBHOST ..."
-  ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > ~/temp.sql"
+  ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > /tmp/temp.sql"
   echo "Downloading dump ..."
-  scp $REMOTEUSER@$REMOTEHOST:~/temp.sql $DUMPPATH
+  scp $REMOTEUSER@$REMOTEHOST:/tmp/temp.sql $DUMPPATH
+}
+
+#
+# Download remote backup db dump to local. This dump is not created by this script.
+#
+remote_downloaddbdump () {
+ DUMPPATH="$REMOTEINDEX.sql"
+  echo "Downloading dump ..."
+  case $REMOTETYPE in 
+    "ssh" )
+      scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
+    ;;
+  esac
+
 }
 
 #
@@ -321,15 +336,16 @@ case "$1" in
     ;;
  
   "config" )
-    echo "Local DB host  : $LOCALDBHOST"
-    echo "Local DB user  : $LOCALDBUSER"
-    echo "Local DB       : $LOCALDB"
-    echo "Remote host    : $REMOTEHOST"
-    echo "Remote user    : $REMOTEUSER"
-    echo "Remote root    : $REMOTEROOT"
-    echo "Remote DB host : $REMOTEDBHOST"
-    echo "Remote DB user : $REMOTEDBUSER"
-    echo "Remote DB      : $REMOTEDB"
+    echo "Local DB host    : $LOCALDBHOST"
+    echo "Local DB user    : $LOCALDBUSER"
+    echo "Local DB         : $LOCALDB"
+    echo "Remote host      : $REMOTEHOST"
+    echo "Remote user      : $REMOTEUSER"
+    echo "Remote root      : $REMOTEROOT"
+    echo "Remote DB host   : $REMOTEDBHOST"
+    echo "Remote DB user   : $REMOTEDBUSER"
+    echo "Remote DB        : $REMOTEDB"
+    echo "Remote DB backup : $REMOTEDBDUMP"
     ;;
  
   #
@@ -474,10 +490,16 @@ case "$1" in
         ;;
     esac
     ;;
+  
+  "downdbdump" )
+    remote_downloaddbdump
+    ;;
+  
   "downdb" )
     remote_dumpdb
     local_importremotedb
     ;;
+    
   "dumplocaldb" )
     # this dump is specifically with diff in mind
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
@@ -548,6 +570,25 @@ case "$1" in
     fi
     mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
     ;;
+    
+  #
+  # Do an "ls -l" on the remote site.
+  #
+  "ls" )
+    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy ls <path>"; exit 1; 
+    fi
+    case $REMOTETYPE in 
+      "local" )
+        ls -l $REMOTEROOT$REMOTEPATH
+      ;;
+      "ssh" )    
+        ssh $REMOTEUSER@$REMOTEHOST "ls -l $REMOTEROOT$REMOTEPATH"
+      ;;
+      "ftp" )
+      
+      ;;
+    esac
+    
 esac
 
 #if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
