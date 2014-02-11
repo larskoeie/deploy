@@ -251,7 +251,8 @@ read_pw () {
   return $pw
 }
 
-if [ "$REMOTETYPE" = "ftp" ]; then
+
+require_remotepw () {
   unset REMOTEPASSWORD
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
   read -p "$prompt" -r REMOTEPASSWORD
@@ -259,8 +260,8 @@ if [ "$REMOTETYPE" = "ftp" ]; then
   if [ ! -d ".deploy/remote/$REMOTEINDEX" ]; then
   	mkdir -p .deploy/remote/$REMOTEINDEX
   fi
+}
 
-fi
 
 # Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
 if [ -n "$2" ]; then
@@ -273,19 +274,25 @@ if [ -n "$2" ]; then
 	LOCALPATH=$2
 	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`  
 
-	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"` 
-	REMOTEPATH=`echo $REMOTEPATH | sed "s/\/*$//g"` 
+	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"`
+	REMOTEPATH=`echo $REMOTEPATH | sed "s/^\/*//g;s/\/*$//g"`
 
 	# add trailing slashes
 	LOCALROOT="$LOCALROOT/"
-	REMOTEROOT="$REMOTEROOT/"
-	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"	
-	REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"	
-	
+  if [ ! -z "$REMOTEROOT" ]; then
+    REMOTEROOT="$REMOTEROOT/"
+  fi
+	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"
+	if [ ! -z "$REMOTEHTTPFOLDER" ]; then
+          REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
+        fi
+
 	# if path on local is a directory, add trailing slash, on local AND on remote
 	if [ -d "$LOCALPATH" ]; then
 	  LOCALPATH="$LOCALPATH/"
-	  REMOTEPATH="$REMOTEPATH/"
+  if [ ! -z "$REMOTEPATH" ]; then
+    REMOTEPATH="$REMOTEPATH/"
+  fi
 	fi
 
 	if [ "$REMOTETYPE" = "local" ] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
@@ -386,6 +393,7 @@ case "$1" in
       ;;
 
       "ftp" )
+        require_remotepw
         cd .deploy/remote/$REMOTEINDEX
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
@@ -547,19 +555,21 @@ case "$1" in
     echo "Uploading $LOCALPATH ...";
     case $REMOTETYPE in 
       "local" )
-        rsync -avci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED        
+        rsync -avci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
       ;;
       "ssh" )
         rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
       ;;
       "ftp" )
-        rsync -avnic $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH
+        require_remotepw
+        rsync -avci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH
         cd .deploy/remote/$REMOTEINDEX
-#        echo  <<EOF
-#open $REMOTEHOST
-#user $REMOTEUSER $REMOTEPASSWORD
-#put $REMOTEROOT$REMOTEPATH
-#EOF 
+
+        ftp -nv <<EOF
+open $REMOTEHOST
+user $REMOTEUSER $REMOTEPASSWORD
+put $REMOTEROOT$REMOTEPATH
+EOF
       ;;
     esac
     ;;
