@@ -4,7 +4,7 @@
 #
 
 #
-# Reads state variables.
+# Reads state variables. 
 # Reads config file (.deploy.cnf) and apply values to global variables for later use.
 #
 read_config () {
@@ -76,7 +76,8 @@ require_site_root () {
 # Make sure that configuration for remote site exists. This is required for most commands.
 #
 require_remote () {
-  if [ -z $REMOTEROOT ]; then
+  if [ ! $REMOTEROOT ]
+  then
     echo "Missing remote root"; exit;
   fi
   case $REMOTETYPE in
@@ -121,8 +122,8 @@ require_localdb () {
 # Make sure that configuration for a remote DB exists.
 #
 require_remotedb () {
-  if [ ! -n "$REMOTEDB" ]; then echo "No remote DB configured."; exit 1;
-  fi
+ if [ ! -n "$REMOTEDB" ]; then echo "No remote DB configured."; exit 1;
+ fi
 }
 
 #
@@ -142,13 +143,14 @@ remote_dumpdb () {
 # Download remote backup db dump to local. This dump is not created by this script.
 #
 remote_downloaddbdump () {
- DUMPPATH="$REMOTEINDEX.sql"
+ DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   echo "Downloading dump ..."
-  case $REMOTETYPE in
+  case $REMOTETYPE in 
     "ssh" )
       scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
     ;;
   esac
+
 }
 
 #
@@ -174,16 +176,16 @@ local_importremotedb () {
 #
 # Execute SQL query on local DB.
 #
-local_sqlq () {
+local_sqlq () {	
   mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB -e "$1"
 }
 
-#
+# 
 # Executes SQL query on DB.
 #
 sqlq () {
-  # for now, pass query on to local DB
-  local_sqlq "$1"
+	# for now, pass query on to local DB
+	local_sqlq "$1"
 }
 
 # Absolute path to this script
@@ -254,29 +256,32 @@ if [ "$REMOTETYPE" = "ftp" ]; then
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
   read -p "$prompt" -r REMOTEPASSWORD
   echo
-  mkdir -p .deploy/remote/$REMOTEINDEX
+  if [ ! -d ".deploy/remote/$REMOTEINDEX" ]; then
+  	mkdir -p .deploy/remote/$REMOTEINDEX
+  fi
+
 fi
 
 # Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
 if [ -n "$2" ]; then
 	# remove trailing slashes from all vars
-	REMOTEROOT=`echo $REMOTEROOT | sed "s/\/*$//g"`
-	LOCALHTTPFOLDER=`echo $LOCALHTTPFOLDER | sed "s/\/*$//g"`
-	REMOTEHTTPFOLDER=`echo $REMOTEHTTPFOLDER | sed "s/\/*$//g"`
+	REMOTEROOT=`echo $REMOTEROOT | sed "s/\/*$//g"` 
+	LOCALHTTPFOLDER=`echo $LOCALHTTPFOLDER | sed "s/\/*$//g"` 
+	REMOTEHTTPFOLDER=`echo $REMOTEHTTPFOLDER | sed "s/\/*$//g"` 
 
 	# make paths
 	LOCALPATH=$2
-	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`
+	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`  
 
-	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"`
-	REMOTEPATH=`echo $REMOTEPATH | sed "s/\/*$//g"`
+	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"` 
+	REMOTEPATH=`echo $REMOTEPATH | sed "s/\/*$//g"` 
 
 	# add trailing slashes
 	LOCALROOT="$LOCALROOT/"
 	REMOTEROOT="$REMOTEROOT/"
-	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"
-	REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
-
+	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"	
+	REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"	
+	
 	# if path on local is a directory, add trailing slash, on local AND on remote
 	if [ -d "$LOCALPATH" ]; then
 	  LOCALPATH="$LOCALPATH/"
@@ -305,7 +310,7 @@ case "$1" in
   "remote" )
     if [ ! -n "$2" ]; then
       echo "Usage: deploy remote <remote>";
-
+    
 	    if [ -f .deploy.cnf ]
 	    then
 	      while read p; do
@@ -313,6 +318,7 @@ case "$1" in
 	        r=`echo $f | cut -d . -f 1`
 	        field=`echo $f | cut -d . -f 2`
 	        value=`echo $p | cut -d = -f 2`
+	
 	        if [ "$r" = "$REMOTEINDEX" ];
 	        then
 	          echo " * $r"
@@ -336,7 +342,6 @@ case "$1" in
     echo "Remote host      : $REMOTEHOST"
     echo "Remote user      : $REMOTEUSER"
     echo "Remote root      : $REMOTEROOT"
-    echo "Remote httpfolder: $REMOTEHTTPFOLDER"
     echo "Remote DB host   : $REMOTEDBHOST"
     echo "Remote DB user   : $REMOTEDBUSER"
     echo "Remote DB        : $REMOTEDB"
@@ -352,11 +357,11 @@ case "$1" in
 
     if [ -f $LOCALPATH ]; then echo -n "Local file :  "; ls -l $LOCALPATH
     fi
-
+    
     case "$REMOTETYPE" in
       "local" )
         if [ -f $LOCALPATH ] && [ -f $REMOTEROOT$REMOTEPATH ]
-        then
+        then          
           echo -n "Remote file : "
           ls -l $REMOTEROOT$REMOTEPATH
           diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
@@ -381,9 +386,7 @@ case "$1" in
       ;;
 
       "ftp" )
-        mkdir -p .deploy/remote/$REMOTEINDEX
         cd .deploy/remote/$REMOTEINDEX
-        echo "wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH"
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
         if [ -f $LOCALPATH ]
@@ -405,6 +408,21 @@ case "$1" in
     esac
     ;;
 
+  "diffdb" )
+    # do a diff on the two db-dump files
+    LOCAL="local.sql"
+    REMOTE="$REMOTEINDEX.sql"
+
+    if [ ! -f $LOCAL ]
+      then echo "no local dump - use dumplocaldb"; exit;
+    fi
+    if [ ! -f $REMOTE ]
+      then echo "no remote dump - use dumpremotedb"; exit;
+    fi
+
+    diff $LOCAL $REMOTE | sed $DIFFCOLORSED
+  ;;
+ 
   # diff and grep for text within diff result
   # TODO : remotetype ftp not implemented 
   "diffsearch" )
@@ -414,7 +432,7 @@ case "$1" in
     echo "Diffing '$LOCALPATH' and searching for '$3' ...";
     echo "Blue lines are added on local - red are removed"
 
-    case "$REMOTETYPE" in
+    case "$REMOTETYPE" in 
       "local" )
         if [ -f $LOCALPATH ]; then
           diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | grep $3 | sed $DIFFCOLORSED
@@ -423,7 +441,7 @@ case "$1" in
           rsync -avnc $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
         fi
       ;;
-
+      
       "ssh" )
         if [ -f $LOCALPATH ]; then
           ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | grep $3 | sed $DIFFCOLORSED
@@ -432,13 +450,13 @@ case "$1" in
           rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
         fi
       ;;
-
+      
       "ftp" )
       ;;
-    esac
+    esac  
   ;;
   "down" )
-    if [ -z "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1;
+    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1;
     fi
 
     # check if "http/" is owned by the current user. If not, downloading files will probably cause trouble. Confirm.
@@ -458,30 +476,43 @@ case "$1" in
     echo "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
       "local" )
-        rsync -avci $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED
+        rsync -avci $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
       ;;
       "ssh" )
         # download structure or single file using rsync
         rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
       "ftp" )
-        cd .deploy/remote/$REMOTEINDEX
+        cd .deploy/remote/$REMOTEINDEX 
         wget -r -nH ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
         cd ../../..
         rsync -avi $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
     esac
     ;;
-
+  
+  #
+  # Would probably not be called directly in real life
+  #
   "downdbdump" )
     remote_downloaddbdump
     ;;
-
+  
+  #
+  # Copy remote database to local.
+  #
   "downdb" )
-    remote_dumpdb
+    # if a dump path is defined, use it - otherwise, make a dump
+    if [ -n $REMOTEDBDUMP ]; then
+      remote_downloaddbdump
+    else      
+      remote_dumpdb
+    fi
+    
     local_importremotedb
     ;;
-
+   
+    
   "dumplocaldb" )
     # this dump is specifically with diff in mind
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
@@ -514,9 +545,9 @@ case "$1" in
     fi
 
     echo "Uploading $LOCALPATH ...";
-    case $REMOTETYPE in
+    case $REMOTETYPE in 
       "local" )
-        rsync -avci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+        rsync -avci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED        
       ;;
       "ssh" )
         rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
@@ -552,24 +583,25 @@ case "$1" in
     fi
     mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
     ;;
-
+    
   #
   # Do an "ls -l" on the remote site.
   #
   "ls" )
-    if [ -z "$LOCALPATH" ]; then echo "Usage: deploy ls <path>"; exit 1;
+    if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy ls <path>"; exit 1; 
     fi
-    case $REMOTETYPE in
+    case $REMOTETYPE in 
       "local" )
         ls -l $REMOTEROOT$REMOTEPATH
       ;;
-      "ssh" )
+      "ssh" )    
         ssh $REMOTEUSER@$REMOTEHOST "ls -l $REMOTEROOT$REMOTEPATH"
       ;;
       "ftp" )
-
+      
       ;;
     esac
+    
 esac
 
 #if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
