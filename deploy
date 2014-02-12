@@ -262,6 +262,16 @@ require_remotepw () {
   fi
 }
 
+strstr () {
+	case "$1" in 
+	  *$2* )
+	    return 1;
+	  ;;
+	  * )
+	    return 0;	
+	  ;;
+	esac
+}
 
 # Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
 if [ -n "$2" ]; then
@@ -317,21 +327,25 @@ case "$1" in
   "remote" )
     if [ ! -n "$2" ]; then
       echo "Usage: deploy remote <remote>";
-    
+   
 	    if [ -f .deploy.cnf ]
 	    then
+	      rs="local,"
 	      while read p; do
 	        f=`echo $p | cut -d = -f 1`
 	        r=`echo $f | cut -d . -f 1`
-	        field=`echo $f | cut -d . -f 2`
-	        value=`echo $p | cut -d = -f 2`
-	
-	        if [ "$r" = "$REMOTEINDEX" ];
-	        then
-	          echo " * $r"
-	        else
-	          echo "   $r"
-	        fi
+	        if [ ! -z $r ]; then
+	          strstr $rs $r
+            if [ $? -eq 0 ]; then
+              if [ "$r" = "$REMOTEINDEX" ]; then
+  	            echo "* $r"
+	            else
+	              echo "  $r"
+   	          fi
+	   	        rs="$rs,$r"
+  	        fi
+  	      fi
+ 	        
 	      done < .deploy.cnf
 	    fi
     else
@@ -343,12 +357,17 @@ case "$1" in
     ;;
  
   "config" )
-    echo "Local DB host    : $LOCALDBHOST"
-    echo "Local DB user    : $LOCALDBUSER"
-    echo "Local DB         : $LOCALDB"
     echo "Remote host      : $REMOTEHOST"
     echo "Remote user      : $REMOTEUSER"
     echo "Remote root      : $REMOTEROOT"
+    echo "Local DB host    : $LOCALDBHOST"
+    echo "Local DB user    : $LOCALDBUSER"
+    echo "Local DB         : $LOCALDB"
+    if [ -z $LOCALDBPASSWORD ]; then
+      echo "Local DB pw      : not present";
+    else
+      echo "Local DB pw      : hidden";
+    fi
     echo "Remote DB host   : $REMOTEDBHOST"
     echo "Remote DB user   : $REMOTEDBUSER"
     echo "Remote DB        : $REMOTEDB"
