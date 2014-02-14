@@ -294,8 +294,8 @@ if [ -n "$2" ]; then
   fi
 	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"
 	if [ ! -z "$REMOTEHTTPFOLDER" ]; then
-          REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
-        fi
+    REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
+  fi
 
 	# if path on local is a directory, add trailing slash, on local AND on remote
 	if [ -d "$LOCALPATH" ]; then
@@ -362,14 +362,19 @@ case "$1" in
     echo "Remote root      : $REMOTEROOT"
     echo "Local DB host    : $LOCALDBHOST"
     echo "Local DB user    : $LOCALDBUSER"
-    echo "Local DB         : $LOCALDB"
     if [ -z $LOCALDBPASSWORD ]; then
-      echo "Local DB pw      : not present";
+      echo "Local DB pw      : unknown";
     else
-      echo "Local DB pw      : hidden";
+      echo "Local DB pw      : OK";
     fi
+    echo "Local DB         : $LOCALDB"
     echo "Remote DB host   : $REMOTEDBHOST"
     echo "Remote DB user   : $REMOTEDBUSER"
+    if [ -z $REMOTEDBPASSWORD ]; then
+      echo "Remote DB pw     : unknown";
+    else
+      echo "Remote DB pw     : OK";
+    fi
     echo "Remote DB        : $REMOTEDB"
     echo "Remote DB backup : $REMOTEDBDUMP"
     ;;

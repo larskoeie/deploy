@@ -22,7 +22,7 @@ if [ -d "http/includes" ]; then
 fi
 
 
-if [ $ISDRUPAL7 ] && [ !-z $LOCALDBPASSWORD ]; then
+if [ $ISDRUPAL7 ] && [ ! -z $LOCALDBPASSWORD ]; then
 	php_code=$(cat <<-'EOF' 
 		error_reporting(E_ERROR | E_PARSE);
 		$drupal_version = '';
