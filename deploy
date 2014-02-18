@@ -132,7 +132,7 @@ require_remotedb () {
 remote_dumpdb () {
   require_ssh
   require_remotedb
-  DUMPPATH="$REMOTEINDEX.sql"
+  DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   echo "Dumping $REMOTEDB on $REMOTEDBUSER@$REMOTEDBHOST ..."
   ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > /tmp/temp.sql"
   echo "Downloading dump ..."
@@ -140,12 +140,14 @@ remote_dumpdb () {
 }
 
 #
-# Download remote backup db dump to local. This dump is not created by this script.
+# Downloads db dump from current remote and places file(s) in .deploy/dump. Handles any untar'ing/unzipping that is neccessary.
+# The downloaded dump is not created by this script.
 #
 remote_downloaddbdump () {
- DUMPPATH=".deploy/dump/$REMOTEINDEX/"
+  DUMPPATH=".deploy/dump/$REMOTEINDEX/"
+  mkdir -p $DUMPPATH
   echo "Downloading dump ..."
-  case $REMOTETYPE in 
+  case $REMOTETYPE in
     "ssh" )
       scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
     ;;
@@ -158,7 +160,7 @@ remote_downloaddbdump () {
 #
 local_dumpdb () {
   require_localdb
-  DUMPPATH="local.sql"
+  DUMPPATH=".deploy/dump/local/local.sql"
   # --skip-extended-insert makes dump larger, but provides better results with diff later on
   echo "Dumping $LOCALDB on $LOCALDBUSER@$LOCALDBHOST ..."
   mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB > $DUMPPATH
@@ -166,11 +168,18 @@ local_dumpdb () {
 
 #
 # Import dump from remote site to local DB
+# Dump(s) are fetched from ./deploy/dump/[remote_key]/*
+# Dump(s) should be plain sql format. File extensions are ignored. DROP/CREATE/TRUNCATE etc. are optional.
 #
 local_importremotedb () {
   require_localdb
-  echo "Importing file $REMOTEINDEX.sql ..."
-  mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $REMOTEINDEX.sql
+  
+  DUMPPATH=".deploy/dump/$REMOTEINDEX/"
+  for f in `ls $DUMPPATH`; do
+    echo "File -> $f"
+    echo "Importing file $f ..."
+    mysql -v -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $DUMPPATH$f
+  done
 }
 
 #
@@ -529,7 +538,7 @@ case "$1" in
   "downdbdump" )
     remote_downloaddbdump
     ;;
-  
+
   #
   # Copy remote database to local.
   #
@@ -537,14 +546,13 @@ case "$1" in
     # if a dump path is defined, use it - otherwise, make a dump
     if [ -n $REMOTEDBDUMP ]; then
       remote_downloaddbdump
-    else      
+    else
       remote_dumpdb
     fi
-    
+
     local_importremotedb
     ;;
-   
-    
+
   "dumplocaldb" )
     # this dump is specifically with diff in mind
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
@@ -555,16 +563,18 @@ case "$1" in
     mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
     ;;
 
+  #
   "dumpremotedb" )
     remote_dumpdb
     ;;
 
+  # run a sql query on local db
   "sqlq" )
     if [ ! -n "$2" ]; then echo "Usage: deploy sqlq <sql>"; exit 1;
     fi
     sqlq "$2"
-
     ;;
+    
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
