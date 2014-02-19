@@ -8,15 +8,22 @@
 # Reads config file (.deploy.cnf) and apply values to global variables for later use.
 #
 read_config () {
-  REMOTEINDEX=""
+  if [ -f .deploy.cnf ]; then
+    mv .deploy.cnf .deploy/config
+  fi
   if [ -f .deploy.state ]; then
-    f=`cat .deploy.state | cut -d = -f 1`
-    v=`cat .deploy.state | cut -d = -f 2`
+    mv .deploy.state .deploy/state
+  fi
+
+  REMOTEINDEX=""
+  if [ -f .deploy/state ]; then
+    f=`cat .deploy/state | cut -d = -f 1`
+    v=`cat .deploy/state | cut -d = -f 2`
     if [ "$f" = "remote" ]; then
       REMOTEINDEX=$v
     fi
   fi
-  if [ -f .deploy.cnf ]
+  if [ -f .deploy/config ]
   then
     while read p; do
       f=`echo $p | cut -d = -f 1`
@@ -53,7 +60,7 @@ read_config () {
           "dbdump" ) REMOTEDBDUMP=$value ;;
         esac
       fi
-    done < .deploy.cnf
+    done < .deploy/config
   fi
 }
 
@@ -61,7 +68,7 @@ read_config () {
 # Write state variables to file.
 #
 write_state () {
-  echo "remote=$REMOTEINDEX" > .deploy.state
+  echo "remote=$REMOTEINDEX" > .deploy/state
 }
 
 #
@@ -348,7 +355,7 @@ case "$1" in
     if [ ! -n "$2" ]; then
       echo "Usage: deploy remote <remote>";
    
-	    if [ -f .deploy.cnf ]
+	    if [ -f .deploy/config ]
 	    then
 	      rs="local,"
 	      while read p; do
@@ -366,7 +373,7 @@ case "$1" in
   	        fi
   	      fi
  	        
-	      done < .deploy.cnf
+	      done < .deploy/config
 	    fi
     else
       REMOTEINDEX=$2
