@@ -2,10 +2,8 @@
 
 if [ -d "http/typo3conf" ]; then 
 	php_code=$(cat <<-'EOF' 
-		error_reporting(E_ERROR | E_PARSE);
-		$_EXTKEY = 'cms';
-		include(getcwd() . '/http/typo3/sysext/' . $_EXTKEY . '/ext_emconf.php'); 
-		$t3_version = $EM_CONF['cms']['version'];
+		error_reporting(E_ALL);
+		$t3_version = '4.7';
 	
 		$conffile = getcwd() . '/http/typo3conf/localconf.php';
 		if (is_file($conffile)) {
@@ -34,7 +32,6 @@ if [ -d "http/typo3conf" ]; then
 		));
 EOF
 )
-
 	php_cwd=`/usr/bin/php -r "$php_code"`
 	
 	CONFIG=$php_cwd
@@ -43,6 +40,7 @@ EOF
 	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
 	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
 	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+
 fi
 
 

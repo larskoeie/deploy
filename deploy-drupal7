@@ -19,33 +19,32 @@ if [ -d "http/includes" ]; then
 	ISDRUPAL7=1; 
 	echo "Drupal 7 found"
 	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal7.txt"
-fi
 
 
-if [ $ISDRUPAL7 ] && [ ! -z $LOCALDBPASSWORD ]; then
-	php_code=$(cat <<-'EOF' 
-		error_reporting(E_ERROR | E_PARSE);
-		$drupal_version = '';
+	if [ ! -z $LOCALDBPASSWORD ]; then
+		php_code=$(cat <<-'EOF' 
+			error_reporting(E_ERROR | E_PARSE);
+			$drupal_version = '';
+		
+			$conffile = getcwd() . "/http/sites/default/settings.php";
+			if (is_file($conffile)) {
+				include($conffile); 
+				$db = $databases['default']['default'];
+				$db_host = $db['host'];
+				$db_username = $db['username'];
+				$db_password = $db['password'];
+				$db_db = $db['database'];
+			}	
+			echo implode(";", array(
+				$drupal_version,
+				$db_host,
+				$db_username,
+				$db_password,
+				$db_db
+			));
 	
-		$conffile = getcwd() . "/http/sites/default/settings.php";
-		if (is_file($conffile)) {
-			include($conffile); 
-			$db = $databases['default']['default'];
-			$db_host = $db['host'];
-			$db_username = $db['username'];
-			$db_password = $db['password'];
-			$db_db = $db['database'];
-		}	
-		echo implode(";", array(
-			$drupal_version,
-			$db_host,
-			$db_username,
-			$db_password,
-			$db_db
-		));
-
-EOF
-)
+	EOF
+	)
 
 	php_cwd=`/usr/bin/php -r "$php_code"`
 	
@@ -63,7 +62,7 @@ EOF
 #		echo $php_cwd
 	
 	
-	
+fi	
 fi
 
 if [ $handled ]

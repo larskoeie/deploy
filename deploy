@@ -143,15 +143,22 @@ remote_dumpdb () {
 # Downloads db dump from current remote and places file(s) in .deploy/dump. Handles any untar'ing/unzipping that is neccessary.
 # The downloaded dump is not created by this script.
 #
-remote_downloaddbdump () {
+remote_downloaddbdump () {	
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   mkdir -p $DUMPPATH
   echo "Downloading dump ..."
-  case $REMOTETYPE in
+  case $REMOTETYPE in 
     "ssh" )
       scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
     ;;
   esac
+  
+  cd $DUMPPATH
+  for f in `ls *.gz`; do
+    gunzip -f $f
+  done
+
+  cd $LOCALROOT
 
 }
 
@@ -160,7 +167,7 @@ remote_downloaddbdump () {
 #
 local_dumpdb () {
   require_localdb
-  DUMPPATH=".deploy/dump/local/local.sql"
+  DUMPPATH="local.sql"
   # --skip-extended-insert makes dump larger, but provides better results with diff later on
   echo "Dumping $LOCALDB on $LOCALDBUSER@$LOCALDBHOST ..."
   mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB > $DUMPPATH
@@ -169,7 +176,7 @@ local_dumpdb () {
 #
 # Import dump from remote site to local DB
 # Dump(s) are fetched from ./deploy/dump/[remote_key]/*
-# Dump(s) should be plain sql format. File extensions are ignored. DROP/CREATE/TRUNCATE etc. are optional.
+# Dump(s) should be plain sql format. File extensions are ignored. DROP/CREATE/TRUNCATE on tables etc. are optional.
 #
 local_importremotedb () {
   require_localdb
@@ -178,6 +185,9 @@ local_importremotedb () {
   for f in `ls $DUMPPATH`; do
     echo "File -> $f"
     echo "Importing file $f ..."
+    # remove "create database" and "use" as we want to control database name from outside
+    # there is a (at least theoretical) risc that this can remove something that is not a sql "CREATE DATABASE" or "USE" statement.
+    sed -i.bak "s/^CREATE DATABASE.*$//g;s/^USE.*$//g" $DUMPPATH$f
     mysql -v -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $DUMPPATH$f
   done
 }
@@ -229,11 +239,6 @@ USAGE="Usage: deploy <command> [path]
     up           Upload the specified path from local to remote
     remote       Switch remote.";
 
-#
-# Source system specific scripts.
-#
-. deploy-typo3
-. deploy-drupal7
 
 # If no command, show usage
 if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
@@ -241,6 +246,12 @@ fi
 
 require_site_root
 read_config
+
+#
+# Source system specific scripts.
+#
+. deploy-typo3
+. deploy-drupal7
 
 #
 # Reads a password from prompt. Show *'s
@@ -538,7 +549,7 @@ case "$1" in
   "downdbdump" )
     remote_downloaddbdump
     ;;
-
+  
   #
   # Copy remote database to local.
   #
@@ -546,13 +557,14 @@ case "$1" in
     # if a dump path is defined, use it - otherwise, make a dump
     if [ -n $REMOTEDBDUMP ]; then
       remote_downloaddbdump
-    else
+    else      
       remote_dumpdb
     fi
-
+    
     local_importremotedb
     ;;
-
+   
+    
   "dumplocaldb" )
     # this dump is specifically with diff in mind
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
@@ -563,7 +575,7 @@ case "$1" in
     mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
     ;;
 
-  #
+  # 
   "dumpremotedb" )
     remote_dumpdb
     ;;
