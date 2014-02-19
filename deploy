@@ -71,6 +71,11 @@ write_state () {
   echo "remote=$REMOTEINDEX" > .deploy/state
 }
 
+deploy_log () {
+  t=`date +"%Y%m%d %H%i%s"`
+  echo "$t - $1" >> .deploy/log
+}
+
 #
 # Require that the current directory is the one above http/
 #
@@ -150,7 +155,8 @@ remote_dumpdb () {
 # Downloads db dump from current remote and places file(s) in .deploy/dump. Handles any untar'ing/unzipping that is neccessary.
 # The downloaded dump is not created by this script.
 #
-remote_downloaddbdump () {	
+remote_downloaddbdump () {
+  deploy_log "downloading db dump - start"
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   mkdir -p $DUMPPATH
   echo "Downloading dump ..."
@@ -166,7 +172,7 @@ remote_downloaddbdump () {
   done
 
   cd $LOCALROOT
-
+  deploy_log "... finished"
 }
 
 #
