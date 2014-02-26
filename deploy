@@ -159,7 +159,6 @@ remote_downloaddbdump () {
   deploy_log "downloading db dump - start"
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   mkdir -p $DUMPPATH
-  echo "Downloading dump ..."
   case $REMOTETYPE in 
     "ssh" )
       scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
@@ -193,6 +192,8 @@ local_dumpdb () {
 #
 local_importremotedb () {
   require_localdb
+
+  deploy_log "Importing database dump ...";
   
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   for f in `ls $DUMPPATH`; do
@@ -203,6 +204,9 @@ local_importremotedb () {
     sed -i.bak "s/^CREATE DATABASE.*$//g;s/^USE.*$//g" $DUMPPATH$f
     mysql -v -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $DUMPPATH$f
   done
+  
+  deploy_log "... finished.";
+
 }
 
 #
@@ -263,8 +267,8 @@ read_config
 #
 # Source system specific scripts.
 #
-. deploy-typo3
-. deploy-drupal7
+. $SCRIPTPATH/deploy-typo3
+. $SCRIPTPATH/deploy-drupal7
 
 #
 # Reads a password from prompt. Show *'s
@@ -353,29 +357,47 @@ if [ $handled ]; then
   exit 0;
 fi
 
+CMD=$1
+COMMAND=$CMD
+
+#
+# Invoke "before"-hook
+#
+if [ -f ".deploy/hooks/$COMMAND-before" ]; then
+  .deploy/hooks/$CMD-before
+fi
+
+#
+# Invoke "instead"-hook
+#
+if [ -f ".deploy/hooks/$CMD" ]; then
+  .deploy/hooks/$CMD
+  COMMAND="_replaced"
+fi
+
 #
 # Now go to action
 #
-case "$1" in
+case "$COMMAND" in
   "remote" )
     if [ ! -n "$2" ]; then
       echo "Usage: deploy remote <remote>";
    
 	    if [ -f .deploy/config ]
 	    then
-	      rs="local,"
+	      rs=",local,"
 	      while read p; do
 	        f=`echo $p | cut -d = -f 1`
 	        r=`echo $f | cut -d . -f 1`
 	        if [ ! -z $r ]; then
-	          strstr $rs $r
+	          strstr $rs ",$r,"
             if [ $? -eq 0 ]; then
               if [ "$r" = "$REMOTEINDEX" ]; then
   	            echo "* $r"
 	            else
 	              echo "  $r"
    	          fi
-	   	        rs="$rs,$r"
+	   	        rs="$rs,$r,"
   	        fi
   	      fi
  	        
@@ -419,7 +441,7 @@ case "$1" in
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
     fi
 
-    if [ -f $LOCALPATH ]; then echo -n "Local file :  "; ls -l $LOCALPATH
+    if [ -f $LOCALPATH ]; then echo -n "Local file  : "; ls -l $LOCALPATH
     fi
     
     case "$REMOTETYPE" in
@@ -437,6 +459,9 @@ case "$1" in
       "ssh" )
         if [ -f $LOCALPATH ]
         then
+          echo -n "Remote file : "
+          ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT; ls -l $REMOTEPATH"
+ 
           echo "Blue lines are added on local - red are removed"
           # do an actual diff on two files
           ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed $DIFFCOLORSED
@@ -538,7 +563,7 @@ case "$1" in
 
     fi
 
-    echo "Downloading $LOCALPATH ...";
+    deploy_log "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
       "local" )
         rsync -avci $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
@@ -554,10 +579,13 @@ case "$1" in
         rsync -avi $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
     esac
+    deploy_log "... finished.";
+
     ;;
+
   
   #
-  # Would probably not be called directly in real life
+  # Would probably not be called directly in real life, as it is part of "downdb"
   #
   "downdbdump" )
     remote_downloaddbdump
@@ -582,7 +610,7 @@ case "$1" in
     # this dump is specifically with diff in mind
     if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
     fi
-    DUMPPATH="$LOCALSITENAME-local.sql"
+    DUMPPATH=".deploy/dump/local.sql"
     echo "Dumping to $DUMPPATH ..."
     # --skip-extended-insert makes dump larger, but provides better results with diff later on
     mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
@@ -603,7 +631,7 @@ case "$1" in
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
-    echo -n "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE. Continue? y/n : ";
+    echo -n "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE.\nContinue? y/n : ";
     read -r c
     if [ "$c" != "y" ]
     then
@@ -650,7 +678,7 @@ EOF
       echo "Usage: deploy importlocaldb <file>"
       exit 1;
     fi
-    mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
+    mysql -h$LOCALDBHOST -u$LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
     ;;
     
   #
@@ -670,9 +698,20 @@ EOF
       
       ;;
     esac
-    
+	;;
+	
+	"_replaced" )	
+	;;	    
 esac
 
 #if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
 #fi
+
+#
+# Invoke "after"-hook
+#
+if [ -f ".deploy/hooks/$CMD-after" ]; then
+  .deploy/hooks/$CMD-after
+fi
+
 
