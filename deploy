@@ -72,7 +72,7 @@ write_state () {
 }
 
 deploy_log () {
-  t=`date +"%Y%m%d %H%i%s"`
+  t=`date +"%Y.%m.%d-%H.%M.%S"`
   echo "$t - $1" >> .deploy/log
 }
 
@@ -171,7 +171,7 @@ remote_downloaddbdump () {
   done
 
   cd $LOCALROOT
-  deploy_log "... finished"
+  deploy_log "Done"
 }
 
 #
@@ -205,7 +205,7 @@ local_importremotedb () {
     mysql -v -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $DUMPPATH$f
   done
   
-  deploy_log "... finished.";
+  deploy_log "Done.";
 
 }
 
@@ -363,15 +363,15 @@ COMMAND=$CMD
 #
 # Invoke "before"-hook
 #
-if [ -f ".deploy/hooks/$COMMAND-before" ]; then
-  .deploy/hooks/$CMD-before
+if [ -f ".deploy/hook/$COMMAND-before" ]; then
+  .deploy/hook/$CMD-before
 fi
 
 #
 # Invoke "instead"-hook
 #
-if [ -f ".deploy/hooks/$CMD" ]; then
-  .deploy/hooks/$CMD
+if [ -f ".deploy/hook/$CMD" ]; then
+  .deploy/hook/$CMD
   COMMAND="_replaced"
 fi
 
@@ -579,7 +579,7 @@ case "$COMMAND" in
         rsync -avi $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
     esac
-    deploy_log "... finished.";
+    deploy_log "Done.";
 
     ;;
 
@@ -710,8 +710,8 @@ esac
 #
 # Invoke "after"-hook
 #
-if [ -f ".deploy/hooks/$CMD-after" ]; then
-  .deploy/hooks/$CMD-after
+if [ -f ".deploy/hook/$CMD-after" ]; then
+  .deploy/hook/$CMD-after
 fi
 
 
