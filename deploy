@@ -145,9 +145,9 @@ remote_dumpdb () {
   require_ssh
   require_remotedb
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
-  echo "Dumping $REMOTEDB on $REMOTEDBUSER@$REMOTEDBHOST ..."
+  deploy_log "Dumping $REMOTEDB on $REMOTEDBUSER@$REMOTEDBHOST ..."
   ssh $REMOTEUSER@$REMOTEHOST "mysqldump --skip-extended-insert -h $REMOTEDBHOST -u $REMOTEDBUSER -p $REMOTEDB > /tmp/temp.sql"
-  echo "Downloading dump ..."
+  deploy_log "Downloading dump ..."
   scp $REMOTEUSER@$REMOTEHOST:/tmp/temp.sql $DUMPPATH
 }
 
@@ -490,7 +490,7 @@ case "$COMMAND" in
           # diff structures using rsync
           echo "Blue lines are changed or added on local."
           echo "-avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED"
-          rsync -avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          rsync -avnci --delete $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
         fi
 
@@ -573,6 +573,7 @@ case "$COMMAND" in
         rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
       "ftp" )
+        require_remotepw
         cd .deploy/remote/$REMOTEINDEX 
         wget -r -nH ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
         cd ../../..
@@ -700,8 +701,12 @@ EOF
     esac
 	;;
 	
-	"_replaced" )	
-	;;	    
+    "_replaced" )
+    ;;
+
+    "log" )
+      tail .deploy/log
+    ;;
 esac
 
 #if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
