@@ -71,8 +71,21 @@ write_state () {
   echo "remote=$REMOTEINDEX" > .deploy/state
 }
 
+#
+#
+#
+deploy_confirm () {
+	echo -n "$1 Continue ? (y/n)"
+	read -r c
+	if [ "$c" != "y" ]
+	then
+	  echo "Aborted";
+	  exit;
+	fi
+}
+
 deploy_log () {
-  t=`date +"%Y.%m.%d-%H.%M.%S"`
+  t=`date +"%Y.%m.%d %H.%M.%S"`
   echo "$t - $1" >> .deploy/log
 }
 
@@ -156,7 +169,7 @@ remote_dumpdb () {
 # The downloaded dump is not created by this script.
 #
 remote_downloaddbdump () {
-  deploy_log "downloading db dump - start"
+  deploy_log "Downloading db dump ..."
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   mkdir -p $DUMPPATH
   case $REMOTETYPE in 
@@ -180,9 +193,9 @@ remote_downloaddbdump () {
 local_dumpdb () {
   require_localdb
   DUMPPATH="local.sql"
-  # --skip-extended-insert makes dump larger, but provides better results with diff later on
-  echo "Dumping $LOCALDB on $LOCALDBUSER@$LOCALDBHOST ..."
+  deploy_log "Dumping $LOCALDB on $LOCALDBUSER@$LOCALDBHOST ..."
   mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB > $DUMPPATH
+  deploy_log "Done."
 }
 
 #
@@ -269,6 +282,7 @@ read_config
 #
 . $SCRIPTPATH/deploy-typo3
 . $SCRIPTPATH/deploy-drupal7
+
 
 #
 # Reads a password from prompt. Show *'s
@@ -363,15 +377,15 @@ COMMAND=$CMD
 #
 # Invoke "before"-hook
 #
-if [ -f ".deploy/hook/$COMMAND-before" ]; then
-  .deploy/hook/$CMD-before
+if [ -f ".deploy/hooks/pre-$CMD" ]; then
+  . .deploy/hooks/pre-$CMD
 fi
 
 #
 # Invoke "instead"-hook
 #
-if [ -f ".deploy/hook/$CMD" ]; then
-  .deploy/hook/$CMD
+if [ -f ".deploy/hooks/$CMD" ]; then
+  . .deploy/hooks/$CMD
   COMMAND="_replaced"
 fi
 
@@ -430,8 +444,15 @@ case "$COMMAND" in
     else
       echo "Remote DB pw     : OK";
     fi
-    echo "Remote DB        : $REMOTEDB"
+    echo "Remote DB        : $REMOTEDB"    
     echo "Remote DB backup : $REMOTEDBDUMP"
+    
+    if [ $REMOTETYPE="ssh" ]; then
+      echo -n "Local PHP        : "
+      php --version | sed -n 1p
+      echo -n "Remote PHP       : "
+      ssh $REMOTEUSER@$REMOTEHOST "php --version | sed -n 1p"
+    fi
     ;;
  
   #
@@ -443,6 +464,8 @@ case "$COMMAND" in
 
     if [ -f $LOCALPATH ]; then echo -n "Local file  : "; ls -l $LOCALPATH
     fi
+
+    echo "Blue lines are local - red are remote"
     
     case "$REMOTETYPE" in
       "local" )
@@ -462,33 +485,31 @@ case "$COMMAND" in
           echo -n "Remote file : "
           ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT; ls -l $REMOTEPATH"
  
-          echo "Blue lines are added on local - red are removed"
           # do an actual diff on two files
           ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
           # diff folder structure using rsync dry-run
-          echo "Blue lines are changed or added on local - red are removed."
           rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
         fi
       ;;
 
       "ftp" )
         require_remotepw
+        deploy_log "Syncing local cache from remote ..."
         cd .deploy/remote/$REMOTEINDEX
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
+				deploy_log "Done."
         if [ -f $LOCALPATH ]
         then
-          echo "Blue lines are added on local - red are removed"
           # do an actual diff on two files
           diff -w -u .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
           # diff structures using rsync
-          echo "Blue lines are changed or added on local."
           echo "-avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED"
           rsync -avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
@@ -566,7 +587,7 @@ case "$COMMAND" in
     deploy_log "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
       "local" )
-        rsync -avci $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
+        rsync -avci $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
       ;;
       "ssh" )
         # download structure or single file using rsync
@@ -631,18 +652,11 @@ case "$COMMAND" in
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
-    echo -n "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE.\nContinue? y/n : ";
-    read -r c
-    if [ "$c" != "y" ]
-    then
-      echo "Aborted";
-      exit;
-    fi
-
-    echo "Uploading $LOCALPATH ...";
+    deploy_confirm "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE.";
+    deploy_log "Uploading $LOCALPATH ...";
     case $REMOTETYPE in 
       "local" )
-        rsync -avci $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+        rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
       ;;
       "ssh" )
         rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
@@ -659,8 +673,9 @@ put $REMOTEROOT$REMOTEPATH
 EOF
       ;;
     esac
+    deploy_log "Done."
     ;;
-
+		
   # create tar with folder
   "dumplocal" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy dumplocal <path>"; exit 1;
@@ -678,11 +693,13 @@ EOF
       echo "Usage: deploy importlocaldb <file>"
       exit 1;
     fi
+    deploy_log "Importing database to local ..."
     mysql -h$LOCALDBHOST -u$LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $2
+    deploy_log "Done."
     ;;
     
   #
-  # Do an "ls -l" on the remote site.
+  # Do "ls -l" on the remote site.
   #
   "ls" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy ls <path>"; exit 1; 
@@ -695,7 +712,7 @@ EOF
         ssh $REMOTEUSER@$REMOTEHOST "ls -l $REMOTEROOT$REMOTEPATH"
       ;;
       "ftp" )
-      
+        # TODO
       ;;
     esac
 	;;
@@ -704,14 +721,22 @@ EOF
 	;;	    
 esac
 
-#if [ -f deploy-temp.sql ]; then rm deploy-temp.sql;
-#fi
+if [ -f .deploy/temp.sql ]; then rm .deploy/temp.sql;
+fi
+
+#
+# Source system specific scripts.
+#
+. $SCRIPTPATH/deploy-typo3
+. $SCRIPTPATH/deploy-drupal7
+
 
 #
 # Invoke "after"-hook
 #
-if [ -f ".deploy/hook/$CMD-after" ]; then
-  .deploy/hook/$CMD-after
+if [ -f ".deploy/hooks/post-$CMD" ]; then
+  . .deploy/hooks/post-$CMD
 fi
+
 
 

@@ -75,6 +75,11 @@ case "$1" in
 		local_clear_cache
 		;;
 
+	"rdrush" )
+	  deploy_confirm "You are invoking drush on remote site."
+	  ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH$REMOTEHTTPFOLDER; drush $2 $3"
+	;;
+	
 	"users-disable-except" )
 		if [ ISDRUPAL7 ]; then				
 			username=$2
