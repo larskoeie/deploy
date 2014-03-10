@@ -77,7 +77,11 @@ case "$1" in
 
 	"rdrush" )
 	  deploy_confirm "You are invoking drush on remote site."
-	  ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH$REMOTEHTTPFOLDER; drush $2 $3"
+	  ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH$REMOTEHTTPFOLDER; drush $2 $3 $4 $5"
+	;;
+	
+	"ssh" )
+	  ssh $REMOTEUSER@$REMOTEHOST "$2 $3 $4 $5"
 	;;
 	
 	"users-disable-except" )
