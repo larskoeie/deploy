@@ -58,6 +58,7 @@ read_config () {
           "dbuser" ) REMOTEDBUSER=$value ;;
           "db" ) REMOTEDB=$value ;;
           "dbdump" ) REMOTEDBDUMP=$value ;;
+          "url" ) REMOTEURL=$value ;;
         esac
       fi
     done < .deploy/config
@@ -176,6 +177,13 @@ remote_downloaddbdump () {
     "ssh" )
       scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
     ;;
+    "ftp" )
+      if [ -z $REMOTEDBDUMP ]; then
+        exit;
+      fi
+      echo "$REMOTEURL/$REMOTEDBDUMP"
+       wget $REMOTEURL/$REMOTEDBDUMP
+   ;;
   esac
   
   cd $DUMPPATH
@@ -689,8 +697,8 @@ user $REMOTEUSER $REMOTEPASSWORD
         cd .deploy/remote/$REMOTEINDEX
 
         deploy_ftp_up $REMOTEPATH
-        ftp -np < $LOCALROOT/.deploy/ftp-temp.txt
-        rm $LOCALROOT/.deploy/ftp-temp.txt
+        ftp -nvp < $LOCALROOT/.deploy/ftp-temp.txt
+#        rm $LOCALROOT/.deploy/ftp-temp.txt
       ;;
     esac
     deploy_log "Done."
