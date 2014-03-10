@@ -86,7 +86,7 @@ deploy_confirm () {
 
 deploy_log () {
   t=`date +"%Y.%m.%d %H.%M.%S"`
-  echo "$t - $1" >> .deploy/log
+  echo "$t - $1" >> $LOCALROOT/.deploy/log
 }
 
 #
@@ -255,7 +255,7 @@ TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
 EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
-
+mkdir -p .deploy
 
 USAGE="Usage: deploy <command> [path]
   General commands :
@@ -312,6 +312,22 @@ require_remotepw () {
   	mkdir -p .deploy/remote/$REMOTEINDEX
   fi
 }
+
+#
+# Uploads the object at $1 traversing recursively creating dirs on the go.
+#
+deploy_ftp_up () {
+  if [ -d $1 ]; then
+    echo "mkdir $1" >> $LOCALROOT/.deploy/ftp-temp.txt
+    for f in `ls $1`; do
+      deploy_ftp_up $1/$f
+    done
+  fi
+  if [ -f $1 ]; then
+    echo "put $1" >> $LOCALROOT/.deploy/ftp-temp.txt
+  fi
+}
+
 
 strstr () {
 	case "$1" in 
@@ -447,7 +463,7 @@ case "$COMMAND" in
     echo "Remote DB        : $REMOTEDB"    
     echo "Remote DB backup : $REMOTEDBDUMP"
     
-    if [ $REMOTETYPE="ssh" ]; then
+    if [ "ssh" = "$REMOTETYPE" ]; then
       echo -n "Local PHP        : "
       php --version | sed -n 1p
       echo -n "Remote PHP       : "
@@ -665,13 +681,16 @@ case "$COMMAND" in
       "ftp" )
         require_remotepw
         rsync -avci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH
-        cd .deploy/remote/$REMOTEINDEX
-
-        ftp -nv <<EOF
+        
+        echo  "
 open $REMOTEHOST
 user $REMOTEUSER $REMOTEPASSWORD
-put $REMOTEROOT$REMOTEPATH
-EOF
+" > $LOCALROOT/.deploy/ftp-temp.txt
+        cd .deploy/remote/$REMOTEINDEX
+
+        deploy_ftp_up $REMOTEPATH
+        ftp -np < $LOCALROOT/.deploy/ftp-temp.txt
+        rm $LOCALROOT/.deploy/ftp-temp.txt
       ;;
     esac
     deploy_log "Done."
