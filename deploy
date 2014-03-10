@@ -372,18 +372,18 @@ if [ -n "$2" ]; then
     REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
   fi
 
-	# if path on local is a directory, add trailing slash, on local AND on remote
-	if [ -d "$LOCALPATH" ]; then
-	  LOCALPATH="$LOCALPATH/"
-  if [ ! -z "$REMOTEPATH" ]; then
-    REMOTEPATH="$REMOTEPATH/"
+  # if path on local is a directory, add trailing slash, on local AND on remote
+  if [ -d "$LOCALPATH" ]; then
+    LOCALPATH="$LOCALPATH/"
+    if [ ! -z "$REMOTEPATH" ]; then
+      REMOTEPATH="$REMOTEPATH/"
+    fi
   fi
-	fi
 
-	if [ "$REMOTETYPE" = "local" ] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
-		echo "Local and remote site are in the same place."
-		exit
-	fi
+  if [ "$REMOTETYPE" = "local" ] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
+    echo "Local and remote site are in the same place."
+    exit
+  fi
 fi
 
 if [ -n "$REMOTETITLE" ] && [ "$1" != "remote" ]
