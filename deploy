@@ -181,9 +181,13 @@ remote_downloaddbdump () {
       if [ -z $REMOTEDBDUMP ]; then
         exit;
       fi
-      echo "$REMOTEURL/$REMOTEDBDUMP"
-       wget $REMOTEURL/$REMOTEDBDUMP
-   ;;
+      
+      require_remotepw
+      cd .deploy/dump/$REMOTEINDEX
+      wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEDBDUMP
+      cd ../../..
+
+    ;;
   esac
   
   cd $DUMPPATH
@@ -525,7 +529,7 @@ case "$COMMAND" in
         cd .deploy/remote/$REMOTEINDEX
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
-				deploy_log "Done."
+	deploy_log "Done."
         if [ -f $LOCALPATH ]
         then
           # do an actual diff on two files
