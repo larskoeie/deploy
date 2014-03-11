@@ -65,16 +65,22 @@ if [ -d "http/includes" ]; then
 fi	
 fi
 
-if [ $handled ]
-then 
-	exit; 
-fi	
+#if [ $handled ]
+#then 
+#	exit; 
+#fi	
 	
 case "$1" in 
 	"cc" )
 		local_clear_cache
 		;;
 
+	"diff" )
+	  #if [ ! -z $LOCALPATH ]; then
+    #  rsync -avnci --include=*.info --exclude=*.* $LOCALPATH/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED | sed "s/^\.d.*//g"
+	  #fi
+    #exit;	  
+	;;
 	"rdrush" )
 	  deploy_confirm "You are invoking drush on remote site."
 	  ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH$REMOTEHTTPFOLDER; drush $2 $3 $4 $5"

@@ -72,9 +72,21 @@ write_state () {
 }
 
 #
-#
+# Shows a prompt, waits for response and returns
 #
 deploy_confirm () {
+	echo -n "$1 (y/n)"
+	read -r c
+	if [ "$c" != "y" ]
+	then
+	  exit;
+	fi
+}
+
+#
+# Shows a prompt, waits for response and exits if negative
+#
+deploy_confirm_or_exit () {
 	echo -n "$1 Continue ? (y/n)"
 	read -r c
 	if [ "$c" != "y" ]
@@ -254,8 +266,47 @@ LOCALSITENAME=`basename $LOCALROOT`
 TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
 RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
+INCLUDEFROM=""
 EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 mkdir -p .deploy
+
+# Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
+if [ -n "$2" ]; then
+	# remove trailing slashes from all vars
+	REMOTEROOT=`echo $REMOTEROOT | sed "s/\/*$//g"` 
+	LOCALHTTPFOLDER=`echo $LOCALHTTPFOLDER | sed "s/\/*$//g"` 
+	REMOTEHTTPFOLDER=`echo $REMOTEHTTPFOLDER | sed "s/\/*$//g"` 
+
+	# make paths
+	LOCALPATH=$2
+	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`  
+
+	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"`
+	REMOTEPATH=`echo $REMOTEPATH | sed "s/^\/*//g;s/\/*$//g"`
+
+	# add trailing slashes
+	LOCALROOT="$LOCALROOT/"
+  if [ ! -z "$REMOTEROOT" ]; then
+    REMOTEROOT="$REMOTEROOT/"
+  fi
+	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"
+	if [ ! -z "$REMOTEHTTPFOLDER" ]; then
+    REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
+  fi
+
+  # if path on local is a directory, add trailing slash, on local AND on remote
+  if [ -d "$LOCALPATH" ]; then
+    LOCALPATH="$LOCALPATH/"
+    if [ ! -z "$REMOTEPATH" ]; then
+      REMOTEPATH="$REMOTEPATH/"
+    fi
+  fi
+
+  if [ "$REMOTETYPE" = "local" ] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
+    echo "Local and remote site are in the same place."
+    exit
+  fi
+fi
 
 USAGE="Usage: deploy <command> [path]
   General commands :
@@ -308,9 +359,7 @@ require_remotepw () {
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
   read -p "$prompt" -r REMOTEPASSWORD
   echo
-  if [ ! -d ".deploy/remote/$REMOTEINDEX" ]; then
-  	mkdir -p .deploy/remote/$REMOTEINDEX
-  fi
+ 	mkdir -p .deploy/remote/$REMOTEINDEX
 }
 
 #
@@ -340,46 +389,17 @@ strstr () {
 	esac
 }
 
-# Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
-if [ -n "$2" ]; then
-	# remove trailing slashes from all vars
-	REMOTEROOT=`echo $REMOTEROOT | sed "s/\/*$//g"` 
-	LOCALHTTPFOLDER=`echo $LOCALHTTPFOLDER | sed "s/\/*$//g"` 
-	REMOTEHTTPFOLDER=`echo $REMOTEHTTPFOLDER | sed "s/\/*$//g"` 
 
-	# make paths
-	LOCALPATH=$2
-	REMOTEPATH=`echo "$LOCALPATH" | sed "s/^$LOCALHTTPFOLDER/$REMOTEHTTPFOLDER/g"`  
-
-	LOCALPATH=`echo $LOCALPATH | sed "s/\/*$//g"`
-	REMOTEPATH=`echo $REMOTEPATH | sed "s/^\/*//g;s/\/*$//g"`
-
-	# add trailing slashes
-	LOCALROOT="$LOCALROOT/"
-  if [ ! -z "$REMOTEROOT" ]; then
-    REMOTEROOT="$REMOTEROOT/"
-  fi
-	LOCALHTTPFOLDER="$LOCALHTTPFOLDER/"
-	if [ ! -z "$REMOTEHTTPFOLDER" ]; then
-    REMOTEHTTPFOLDER="$REMOTEHTTPFOLDER/"
-  fi
-
-  # if path on local is a directory, add trailing slash, on local AND on remote
-  if [ -d "$LOCALPATH" ]; then
-    LOCALPATH="$LOCALPATH/"
-    if [ ! -z "$REMOTEPATH" ]; then
-      REMOTEPATH="$REMOTEPATH/"
-    fi
-  fi
-
-  if [ "$REMOTETYPE" = "local" ] && [ "$LOCALROOT$LOCALPATH" = "$REMOTEROOT$REMOTEPATH" ]; then
-    echo "Local and remote site are in the same place."
-    exit
-  fi
+# add site specific include and exclude file
+if [ -f .deploy/include.txt ]; then
+  INCLUDEFROM="$INCLUDEFROM --include-from .deploy/include.txt"
+fi
+if [ -f .deploy/exclude.txt ]; then
+  EXCLUDEFROM="$EXCLUDEFROM --exclude-from .deploy/exclude.txt"
 fi
 
-if [ -n "$REMOTETITLE" ] && [ "$1" != "remote" ]
-then
+# write remote title to stdout
+if [ -n "$REMOTETITLE" ] && [ "$1" != "remote" ]; then
   echo "On remote $REMOTETITLE"
 fi
 
@@ -391,16 +411,25 @@ CMD=$1
 COMMAND=$CMD
 
 #
-# Invoke "before"-hook
+# Invoke "before"-hooks, executing more specific hooks before more general
 #
-if [ -f ".deploy/hooks/pre-$CMD" ]; then
-  . .deploy/hooks/pre-$CMD
+STOP_PROPAGATION=0
+if [ -f ".deploy/hooks/pre-$CMD-$REMOTEINDEX" ]; then
+  . ".deploy/hooks/pre-$CMD-$REMOTEINDEX"
+fi
+if [ ! $STOP_PROPAGATION ] && [ -f ".deploy/hooks/pre-$CMD" ]; then
+  . ".deploy/hooks/pre-$CMD"
 fi
 
 #
 # Invoke "instead"-hook
 #
-if [ -f ".deploy/hooks/$CMD" ]; then
+STOP_PROPAGATION=0
+if [ -f ".deploy/hooks/$CMD-$REMOTEINDEX" ]; then
+  . ".deploy/hooks/$CMD-$REMOTEINDEX"
+  COMMAND="_replaced"
+fi
+if [ ! $STOP_PROPAGATION ] && [ -f ".deploy/hooks/$CMD" ]; then
   . .deploy/hooks/$CMD
   COMMAND="_replaced"
 fi
@@ -491,7 +520,7 @@ case "$COMMAND" in
           ls -l $REMOTEROOT$REMOTEPATH
           diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $DIFFCOLORSED
         else
-          rsync -avnci $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep ">f" | sed $RSYNCCOLORSED
+          rsync -avnci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep ">f" | sed $RSYNCCOLORSED
         fi
 
       ;;
@@ -507,7 +536,7 @@ case "$COMMAND" in
         if [ -d $LOCALPATH ]
         then
           # diff folder structure using rsync dry-run
-          rsync -avnci --delete $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          rsync -avnci --delete $INCLUDEFROM $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
         fi
       ;;
 
@@ -527,7 +556,7 @@ case "$COMMAND" in
         then
           # diff structures using rsync
           echo "-avnci --delete $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED"
-          rsync -avnci --delete $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          rsync -avnci --delete $INCLUDEFROM $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
 
         fi
 
@@ -565,7 +594,7 @@ case "$COMMAND" in
           diff -w -u $REMOTEROOT$REMOTEPATH $LOCALPATH | grep $3 | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]; then
-          rsync -avnc $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
+          rsync -avnc $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
         fi
       ;;
       
@@ -574,7 +603,7 @@ case "$COMMAND" in
           ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | grep $3 | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]; then
-          rsync -avnc $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
+          rsync -avnc $INCLUDEFROM $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | grep $3 | sed $RSYNCCOLORSED
         fi
       ;;
       
@@ -603,18 +632,18 @@ case "$COMMAND" in
     deploy_log "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
       "local" )
-        rsync -avci $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
+        rsync -avci $INCLUDEFROM $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
       ;;
       "ssh" )
         # download structure or single file using rsync
-        rsync -avi $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
+        rsync -avi $INCLUDEFROM $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
       "ftp" )
         require_remotepw
         cd .deploy/remote/$REMOTEINDEX 
         wget -r -nH ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEPATH
         cd ../../..
-        rsync -avi $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
+        rsync -avi $INCLUDEFROM $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
     esac
     deploy_log "Done.";
@@ -669,18 +698,18 @@ case "$COMMAND" in
   "up" )
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy up <path>"; exit 1; 
     fi
-    deploy_confirm "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE.";
+    deploy_confirm_or_exit "This will upload $LOCALPATH to $REMOTEINDEX : $REMOTETITLE.";
     deploy_log "Uploading $LOCALPATH ...";
     case $REMOTETYPE in 
       "local" )
-        rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+        rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
       ;;
       "ssh" )
-        rsync -avci $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
+        rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
       ;;
       "ftp" )
         require_remotepw
-        rsync -avci $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH
+        rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH
         
         echo  "
 open $REMOTEHOST
@@ -737,12 +766,29 @@ user $REMOTEUSER $REMOTEPASSWORD
     esac
 	;;
 	
-    "_replaced" )
-    ;;
+	"mkdir" )
+	  if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy $1 <path>"; exit 1; 
+    fi
+    case $REMOTETYPE in 
+      "local" )
+        mkdir -p $REMOTEROOT$REMOTEPATH
+      ;;
+      "ssh" )    
+        ssh $REMOTEUSER@$REMOTEHOST "mkdir -p $REMOTEROOT$REMOTEPATH"
+      ;;
+      "ftp" )
+        # TODO
+      ;;
+    esac
+  
+	;;
+  
+  "_replaced" )
+  ;;
 
-    "log" )
-      tail .deploy/log
-    ;;
+  "log" )
+    tail .deploy/log
+  ;;
 esac
 
 if [ -f .deploy/temp.sql ]; then rm .deploy/temp.sql;
@@ -751,15 +797,18 @@ fi
 #
 # Source system specific scripts.
 #
-. $SCRIPTPATH/deploy-typo3
-. $SCRIPTPATH/deploy-drupal7
+#. $SCRIPTPATH/deploy-typo3
+#. $SCRIPTPATH/deploy-drupal7
 
 
 #
-# Invoke "after"-hook
+# Invoke "after"-hooks
 #
+if [ -f ".deploy/hooks/post-$CMD-$REMOTEINDEX" ]; then
+  . ".deploy/hooks/post-$CMD-$REMOTEINDEX"
+fi
 if [ -f ".deploy/hooks/post-$CMD" ]; then
-  . .deploy/hooks/post-$CMD
+  . ".deploy/hooks/post-$CMD"
 fi
 
 

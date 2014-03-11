@@ -6,3 +6,4 @@
 .gitignore
 .htaccess
 */.htaccess
+*/robots.txt
