@@ -836,14 +836,8 @@ fi
 
 
 #
-# Invoke "after"-hooks
+# Invoke "post"-hooks
 #
-if [ -f ".deploy/hooks/post-$CMD-$REMOTEINDEX" ]; then
-  . ".deploy/hooks/post-$CMD-$REMOTEINDEX"
-fi
-if [ -f ".deploy/hooks/post-$CMD" ]; then
-  . ".deploy/hooks/post-$CMD"
-fi
-
+deploy_hook "post-$CMD"
 
 
