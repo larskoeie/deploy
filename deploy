@@ -186,7 +186,7 @@ remote_downloaddbdump () {
   deploy_log "Downloading db dump ..."
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   mkdir -p $DUMPPATH
-  case $REMOTETYPE in 
+  case $REMOTETYPE in
     "ssh" )
       scp -r $REMOTEUSER@$REMOTEHOST:$REMOTEDBDUMP $DUMPPATH
     ;;
@@ -194,11 +194,14 @@ remote_downloaddbdump () {
       if [ -z $REMOTEDBDUMP ]; then
         exit;
       fi
-      echo "$REMOTEURL/$REMOTEDBDUMP"
-       wget $REMOTEURL/$REMOTEDBDUMP
-   ;;
+      require_remotepw
+      cd .deploy/dump/$REMOTEINDEX
+      wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEDBDUMP
+      cd ../../..
+
+    ;;
   esac
-  
+
   cd $DUMPPATH
   for f in `ls *.gz`; do
     gunzip -f $f
@@ -228,7 +231,7 @@ local_importremotedb () {
   require_localdb
 
   deploy_log "Importing database dump ...";
-  
+
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   for f in `ls $DUMPPATH`; do
     echo "File -> $f"
@@ -238,7 +241,7 @@ local_importremotedb () {
     sed -i.bak "s/^CREATE DATABASE.*$//g;s/^USE.*$//g" $DUMPPATH$f
     mysql -v -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < $DUMPPATH$f
   done
-  
+
   deploy_log "Done.";
 
 }
@@ -254,8 +257,8 @@ local_sqlq () {
 # Executes SQL query on DB.
 #
 sqlq () {
-	# for now, pass query on to local DB
-	local_sqlq "$1"
+  # for now, pass query on to local DB
+  local_sqlq "$1"
 }
 
 # Absolute path to this script
@@ -412,12 +415,45 @@ deploy_hook () {
   fi
 }
 
+#
+#
+#
+deploy_hook () {
+  # Invoke hooks, executing more specific hooks before more general ones, allowing any hook to prevent execution of the following ones.
+  EVENT=$1
+  STOP_PROPAGATION=0
+
+  # site hooks
+  if [ -f .deploy/hooks/$EVENT-$REMOTEINDEX ]; then
+    . .deploy/hooks/$EVENT-$REMOTEINDEX
+  fi
+  if [ -f .deploy/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
+    . .deploy/hooks/$EVENT
+  fi
+
+  # user hooks
+  if [ -f ~/.deploy/hooks/$EVENT-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
+    . ~/.deploy/hooks/$EVENT-$REMOTEINDEX
+  fi
+  if [ -f ~/.deploy/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
+    . ~/.deploy/hooks/$EVENT
+  fi
+
+  # global hooks
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$REMOTEINDEX
+  fi
+  if [ -f $SCRIPTPATH/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
+    . $SCRIPTPATH/hooks/$EVENT
+  fi
+}
+
 require_remotepw () {
   unset REMOTEPASSWORD
   prompt="FTP password for $REMOTEUSER@$REMOTEHOST : "
   read -p "$prompt" -r REMOTEPASSWORD
   echo
- 	mkdir -p .deploy/remote/$REMOTEINDEX
+  mkdir -p .deploy/remote/$REMOTEINDEX
 }
 
 #
@@ -477,6 +513,7 @@ deploy_hook "pre-$CMD"
 # Invoke "instead"-hook
 #
 deploy_hook $CMD
+<<<<<<< HEAD
 
 # TODO : HOW TO handle this ?
 if [ -f ".deploy/hooks/$CMD-$REMOTEINDEX" ]; then
@@ -602,7 +639,7 @@ case "$COMMAND" in
         cd .deploy/remote/$REMOTEINDEX
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
-				deploy_log "Done."
+	deploy_log "Done."
         if [ -f $LOCALPATH ]
         then
           # do an actual diff on two files
@@ -851,3 +888,5 @@ fi
 # Invoke "post"-hooks
 #
 deploy_hook "post-$CMD"
+
+
