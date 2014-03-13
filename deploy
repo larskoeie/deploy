@@ -1,6 +1,5 @@
 #!/bin/sh
 #
-# - Command 'diff' uses rsync with --delete, real transfer commands do not ! So nothing will ever be deleted.
 #
 
 #
@@ -8,13 +7,15 @@
 # Reads config file (.deploy.cnf) and apply values to global variables for later use.
 #
 read_config () {
+	# --- for backwards compatibility
   if [ -f .deploy.cnf ]; then
     mv .deploy.cnf .deploy/config
   fi
   if [ -f .deploy.state ]; then
     mv .deploy.state .deploy/state
   fi
-
+  # --- 
+  
   REMOTEINDEX=""
   if [ -f .deploy/state ]; then
     f=`cat .deploy/state | cut -d = -f 1`
@@ -273,7 +274,7 @@ REMOTETITLE=""
 LOCALSITENAME=`basename $LOCALROOT`
 TIME=`date +"%y%m%d"`
 DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g"
+RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g;s/cd/\x1b[44m&/g;s/\*/\x1b[41m&/g"
 INCLUDEFROM=""
 EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 mkdir -p .deploy
@@ -337,10 +338,19 @@ require_site_root
 read_config
 
 #
-# Source system specific scripts.
+# Attempt to determine type of system (CMS).
 #
-. $SCRIPTPATH/deploy-typo3
-. $SCRIPTPATH/deploy-drupal7
+if [ -d http/typo3 ]; then
+  SYSTEM="typo3"
+fi
+if [ -d http/modules/node ]; then
+  SYSTEM="drupal7"
+fi
+
+# include system specific script that reads db creds
+if [ -f $SCRIPTPATH/deploy-db-$SYSTEM ]; then
+  . $SCRIPTPATH/deploy-db-$SYSTEM
+fi
 
 
 #
@@ -361,6 +371,46 @@ read_pw () {
   return $pw
 }
 
+#
+#
+#
+deploy_hook () {
+  # Invoke hooks, executing more specific hooks before more general ones.
+  # This allows any hook to prevent execution of the following (more general) ones, or allow them to execute.  
+  EVENT=$1
+  # echo "debug : $EVENT-$SYSTEM-$REMOTEINDEX"
+  
+  STOP_PROPAGATION=0
+
+  #
+  # Chain :
+  #   - site down-preprod
+  #   - site down-
+  # 
+  # site hooks
+  if [ -f .deploy/hooks/$EVENT-$REMOTEINDEX ]; then
+    . .deploy/hooks/$EVENT-$REMOTEINDEX
+  fi
+  if [ -f .deploy/hooks/$EVENT ] && [ $STOP_PROPAGATION -eq 0 ]; then
+    . .deploy/hooks/$EVENT
+  fi
+
+  # user hooks
+  if [ -f ~/.deploy/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ $STOP_PROPAGATION -eq 0 ]; then
+    . ~/.deploy/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
+  fi
+  if [ -f ~/.deploy/hooks/$EVENT-$SYSTEM ] && [ $STOP_PROPAGATION -eq 0 ]; then
+    . ~/.deploy/hooks/$EVENT-$SYSTEM
+  fi
+
+  # global hooks
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ $STOP_PROPAGATION -eq 0 ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
+  fi
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM ] && [ $STOP_PROPAGATION -eq 0 ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM
+  fi
+}
 
 require_remotepw () {
   unset REMOTEPASSWORD
@@ -419,28 +469,26 @@ CMD=$1
 COMMAND=$CMD
 
 #
-# Invoke "before"-hooks, executing more specific hooks before more general
+# Invoke "pre"-hook
 #
-STOP_PROPAGATION=0
-if [ -f ".deploy/hooks/pre-$CMD-$REMOTEINDEX" ]; then
-  . ".deploy/hooks/pre-$CMD-$REMOTEINDEX"
-fi
-if [ ! $STOP_PROPAGATION ] && [ -f ".deploy/hooks/pre-$CMD" ]; then
-  . ".deploy/hooks/pre-$CMD"
-fi
+deploy_hook "pre-$CMD"
 
 #
 # Invoke "instead"-hook
 #
-STOP_PROPAGATION=0
+deploy_hook $CMD
+
+# TODO : HOW TO handle this ?
 if [ -f ".deploy/hooks/$CMD-$REMOTEINDEX" ]; then
   . ".deploy/hooks/$CMD-$REMOTEINDEX"
   COMMAND="_replaced"
 fi
-if [ ! $STOP_PROPAGATION ] && [ -f ".deploy/hooks/$CMD" ]; then
-  . .deploy/hooks/$CMD
-  COMMAND="_replaced"
+
+# handle system specific actions
+if [ -f $SCRIPTPATH/deploy-$SYSTEM ]; then
+  . $SCRIPTPATH/deploy-$SYSTEM
 fi
+
 
 #
 # Now go to action
@@ -626,15 +674,7 @@ case "$COMMAND" in
     # check if "http/" is owned by the current user. If not, downloading files will probably cause trouble. Confirm.
     HTTPOWNER=$(stat -c %U http)
     if [ $HTTPOWNER != $(id -u -n) ]; then
-      echo "You are not $HTTPOWNER. Continue? y/n";
-      prompt=""
-      read -p "$prompt" -r -s -n 1 char
-      if [[ $char != "y" ]]
-      then
-        echo;
-        exit;
-      fi
-
+      deploy_confirm_or_exit "You are not $HTTPOWNER.";
     fi
 
     deploy_log "Downloading $LOCALPATH ...";
@@ -644,7 +684,7 @@ case "$COMMAND" in
       ;;
       "ssh" )
         # download structure or single file using rsync
-        rsync -avi $INCLUDEFROM $EXCLUDEFROM $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
+        rsync -avi $INCLUDEFROM $EXCLUDEFROM --delete $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
       "ftp" )
         require_remotepw
@@ -710,7 +750,11 @@ case "$COMMAND" in
     deploy_log "Uploading $LOCALPATH ...";
     case $REMOTETYPE in 
       "local" )
-        rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+        if [ -n "$REMOTEUSER" ]; then 
+          su $REMOTEUSER -c "rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH"
+        else
+          rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+        fi
       ;;
       "ssh" )
         rsync -avci $INCLUDEFROM $EXCLUDEFROM $LOCALPATH $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH
@@ -802,22 +846,8 @@ esac
 if [ -f .deploy/temp.sql ]; then rm .deploy/temp.sql;
 fi
 
-#
-# Source system specific scripts.
-#
-#. $SCRIPTPATH/deploy-typo3
-#. $SCRIPTPATH/deploy-drupal7
-
 
 #
-# Invoke "after"-hooks
+# Invoke "post"-hooks
 #
-if [ -f ".deploy/hooks/post-$CMD-$REMOTEINDEX" ]; then
-  . ".deploy/hooks/post-$CMD-$REMOTEINDEX"
-fi
-if [ -f ".deploy/hooks/post-$CMD" ]; then
-  . ".deploy/hooks/post-$CMD"
-fi
-
-
-
+deploy_hook "post-$CMD"
