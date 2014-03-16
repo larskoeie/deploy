@@ -340,11 +340,19 @@ require_site_root
 read_config
 
 #
-# Source system specific scripts.
+# Attempt to determine type of system (CMS).
 #
-. $SCRIPTPATH/deploy-typo3
-. $SCRIPTPATH/deploy-drupal7
+if [ -d http/typo3 ]; then
+  $SYSTEM="TYPO3"
+fi
+if [ -d http/modules/node ]; then
+  $SYSTEM="DRUPAL7"
+fi
 
+# include system specific script that reads db creds
+if [ -f $SCRIPTPATH/deploy-db-$SYSTEM ]; then
+  . $SCRIPTPATH/deploy-db-$SYSTEM
+fi
 
 #
 # Reads a password from prompt. Show *'s
@@ -385,16 +393,16 @@ deploy_hook () {
   if [ -f ~/.deploy/hooks/$EVENT-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
     . ~/.deploy/hooks/$EVENT-$REMOTEINDEX
   fi
-  if [ -f ~/.deploy/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
-    . ~/.deploy/hooks/$EVENT
+  if [ -f ~/.deploy/hooks/$EVENT-$SYSTEM ] && [ ! $STOP_PROPAGATION ]; then
+    . ~/.deploy/hooks/$EVENT-$SYSTEM
   fi
 
   # global hooks
-  if [ -f $SCRIPTPATH/hooks/$EVENT-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
-    . $SCRIPTPATH/hooks/$EVENT-$REMOTEINDEX
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
   fi
-  if [ -f $SCRIPTPATH/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
-    . $SCRIPTPATH/hooks/$EVENT
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM ] && [ ! $STOP_PROPAGATION ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM
   fi
 }
 
@@ -828,12 +836,10 @@ esac
 if [ -f .deploy/temp.sql ]; then rm .deploy/temp.sql;
 fi
 
-#
-# Source system specific scripts.
-#
-#. $SCRIPTPATH/deploy-typo3
-#. $SCRIPTPATH/deploy-drupal7
-
+# include system specific script to handle system specific actions
+if [ -f $SCRIPTPATH/deploy-$SYSTEM ]; then
+  . $SCRIPTPATH/deploy-$SYSTEM
+fi
 
 #
 # Invoke "post"-hooks
