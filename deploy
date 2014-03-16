@@ -35,6 +35,7 @@ read_config () {
       if [ "$r" = "local" ];
       then
         case $field in
+          "user" ) LOCALUSER=$value ;;
           "dbhost" ) LOCALDBHOST=$value ;;
           "dbuser" ) LOCALDBUSER=$value ;;
           "db" ) LOCALDB=$value ;;
@@ -59,7 +60,8 @@ read_config () {
           "dbuser" ) REMOTEDBUSER=$value ;;
           "db" ) REMOTEDB=$value ;;
           "dbdump" ) REMOTEDBDUMP=$value ;;
-          "url" ) REMOTEURL=$value ;;
+          "scripturl" ) REMOTESCRIPTURL=$value ;;
+          "key" ) REMOTEKEY=$value ;;
         esac
       fi
     done < .deploy/config
@@ -269,8 +271,8 @@ SCRIPTPATH=`dirname $SCRIPT`
 LOCALROOT=`pwd`
 
 # apply sane config default values
-LOCALHTTPFOLDER="http/"
-REMOTEHTTPFOLDER="http/"
+LOCALHTTPFOLDER="http"
+REMOTEHTTPFOLDER="http"
 REMOTEINDEX=""
 REMOTETYPE="ssh" # "local", "ssh" or "ftp"
 REMOTETITLE=""
@@ -281,6 +283,8 @@ RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g;s/cd/\x1b[44m&/g;
 INCLUDEFROM=""
 EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
 mkdir -p .deploy
+
+read_config
 
 # Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
 if [ -n "$2" ]; then
@@ -338,7 +342,6 @@ if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
 fi
 
 require_site_root
-read_config
 
 #
 # Attempt to determine type of system (CMS).
@@ -471,6 +474,22 @@ deploy_ftp_up () {
   fi
 }
 
+deploy_http_down () {
+  local path=$1
+  wget "$REMOTESCRIPTURL&a=down&p=$path" -O .deploy/temp
+  for T in `cat .deploy/temp`; do
+    local type=`echo $T | cut -d ";" -f 1`;
+    local obj=`echo $T | cut -d ";" -f 2`;
+    if [ "$type" = "d" ]; then
+      mkdir -p "$path/$obj"
+      deploy_http_down "$path/$obj"
+    fi
+    if [ "$type" = "f" ]; then
+      wget "$REMOTESCRIPTURL&a=down&p=$path/$obj" -O "$path/$obj"
+    fi
+  done
+}
+
 
 strstr () {
 	case "$1" in 
@@ -513,7 +532,6 @@ deploy_hook "pre-$CMD"
 # Invoke "instead"-hook
 #
 deploy_hook $CMD
-<<<<<<< HEAD
 
 # TODO : HOW TO handle this ?
 if [ -f ".deploy/hooks/$CMD-$REMOTEINDEX" ]; then
@@ -564,6 +582,7 @@ case "$COMMAND" in
     ;;
  
   "config" )
+    echo "Local user       : $LOCALUSER"
     echo "Remote host      : $REMOTEHOST"
     echo "Remote user      : $REMOTEUSER"
     echo "Remote root      : $REMOTEROOT"
@@ -639,7 +658,7 @@ case "$COMMAND" in
         cd .deploy/remote/$REMOTEINDEX
         wget -r -nH -nv ftp://$REMOTEUSER:$REMOTEPASSWORD@$REMOTEHOST//$REMOTEROOT$REMOTEPATH
         cd ../../..
-	deploy_log "Done."
+        deploy_log "Done."
         if [ -f $LOCALPATH ]
         then
           # do an actual diff on two files
@@ -717,10 +736,15 @@ case "$COMMAND" in
     deploy_log "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
       "local" )
-        rsync -avci $INCLUDEFROM $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
-      ;;
+        if [ -n "$LOCALUSER" ]; then 
+          su $LOCALUSER -c "rsync -avci $INCLUDEFROM $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH"
+        else
+          rsync -avci $INCLUDEFROM $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
+        fi      
+        ;;
       "ssh" )
         # download structure or single file using rsync
+        # we use --delete when downloading
         rsync -avi $INCLUDEFROM $EXCLUDEFROM --delete $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
       "ftp" )
@@ -730,6 +754,13 @@ case "$COMMAND" in
         cd ../../..
         rsync -avi $INCLUDEFROM $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
+
+      "http" )  # VERY experimental ! Not sure how binary safe this is.
+        cd .deploy/remote/$REMOTEINDEX 
+        deploy_http_down
+        rsync -avi $INCLUDEFROM $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
+        cd ../../..
+      ;;
     esac
     deploy_log "Done.";
 
