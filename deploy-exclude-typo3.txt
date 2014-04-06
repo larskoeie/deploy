@@ -1,3 +1,4 @@
+deprecation*.log
 fileadmin
 t3lib/*
 typo3/*

@@ -1,0 +1,60 @@
+#!/bin/sh
+
+
+
+
+
+
+# try to recognize Drupal 7 - there might be better ways
+ISDRUPAL7=0; 
+if [ -d "http/includes" ]; then 
+	ISDRUPAL7=1; 
+	echo "Drupal 7 found"
+	EXCLUDEFROM="$EXCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude-drupal7.txt"
+
+
+	if [ -z $LOCALDBPASSWORD ]; then
+		php_code=$(cat <<-'EOF' 
+			error_reporting(E_ERROR | E_PARSE);
+			$drupal_version = '';
+		
+			$conffile = getcwd() . "/http/sites/default/settings.php";
+			if (is_file($conffile)) {
+				include($conffile); 
+				$db = $databases['default']['default'];
+				$db_host = $db['host'];
+				$db_username = $db['username'];
+				$db_password = $db['password'];
+				$db_db = $db['database'];
+			}	
+			echo implode(";", array(
+				$drupal_version,
+				$db_host,
+				$db_username,
+				$db_password,
+				$db_db
+			));
+	
+	EOF
+	)
+
+	php_cwd=`/usr/bin/php -r "$php_code"`
+	
+	CONFIG=$php_cwd
+	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
+	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
+	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`
+	LOCALDBPASSWORD=`echo $CONFIG | awk '{split($0,a,";"); print a[4]}'`
+	LOCALDB=`echo $CONFIG | awk '{split($0,a,";"); print a[5]}'`
+
+#php_cwd=`ssh $REMOTEUSER@$REMOTEHOST <<'EOF'`
+#/usr/bin/php -r "print_r($_SERVER)"
+#EOF
+
+#		echo $php_cwd
+	
+	
+fi	
+fi
+
+	

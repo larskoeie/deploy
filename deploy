@@ -36,6 +36,7 @@ read_config () {
       then
         case $field in
           "user" ) LOCALUSER=$value ;;
+          "url" ) LOCALURL=$value ;;
           "dbhost" ) LOCALDBHOST=$value ;;
           "dbuser" ) LOCALDBUSER=$value ;;
           "db" ) LOCALDB=$value ;;
@@ -53,6 +54,7 @@ read_config () {
           "type" ) REMOTETYPE=$value ;;
           "title" ) REMOTETITLE=$value ;;
           "host" ) REMOTEHOST=$value ;;
+          "port" ) REMOTEPORT=$value ;;
           "user" ) REMOTEUSER=$value ;;
           "root" ) REMOTEROOT=$value ;;
           "httpfolder" ) REMOTEHTTPFOLDER=$value ;;
@@ -60,7 +62,7 @@ read_config () {
           "dbuser" ) REMOTEDBUSER=$value ;;
           "db" ) REMOTEDB=$value ;;
           "dbdump" ) REMOTEDBDUMP=$value ;;
-          "scripturl" ) REMOTESCRIPTURL=$value ;;
+          "url" ) REMOTEURL=$value ;;
           "key" ) REMOTEKEY=$value ;;
         esac
       fi
@@ -100,9 +102,13 @@ deploy_confirm_or_exit () {
 	fi
 }
 
+#
+# Sends a string to log and to stdout.
+#
 deploy_log () {
   t=`date +"%Y.%m.%d %H.%M.%S"`
   echo "$t - $1" >> $LOCALROOT/.deploy/log
+  echo "$1"
 }
 
 #
@@ -237,7 +243,8 @@ local_importremotedb () {
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   for f in `ls $DUMPPATH`; do
     echo "File -> $f"
-    echo "Importing file $f ..."
+    size=`stat -c%s $f`
+    echo "Importing file $f ($size bytes) ..."
     # remove "create database" and "use" as we want to control database name from outside
     # there is a (at least theoretical) risc that this can remove something that is not a sql "CREATE DATABASE" or "USE" statement.
     sed -i.bak "s/^CREATE DATABASE.*$//g;s/^USE.*$//g" $DUMPPATH$f
@@ -263,6 +270,14 @@ sqlq () {
   local_sqlq "$1"
 }
 
+# 
+# Executes SQL query on DB.
+#
+deploy_sqlq () {
+  # for now, pass query on to local DB
+  local_sqlq "$1"
+}
+
 # Absolute path to this script
 SCRIPT=$(readlink -f $0)
 # Absolute path this script is in
@@ -275,15 +290,33 @@ LOCALHTTPFOLDER="http"
 REMOTEHTTPFOLDER="http"
 REMOTEINDEX=""
 REMOTETYPE="ssh" # "local", "ssh" or "ftp"
+REMOTEPORT="22"
 REMOTETITLE=""
 LOCALSITENAME=`basename $LOCALROOT`
-TIME=`date +"%y%m%d"`
-DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
-RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g;s/cd/\x1b[44m&/g;s/\*/\x1b[41m&/g"
-INCLUDEFROM=""
-EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
-mkdir -p .deploy
 
+# timestamp - used for db dumps etc.
+TIME=`date +"%y%m%d"`
+
+# sed substitution commands for coloring output from diff and rsync
+DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+# the last part removes lines with only "p" (for different permissions)
+RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g;s/cd/\x1b[44m&/g;s/\*/\x1b[41m&/g;/\..\.\.\.p\.\.\.\.\..*$/d"
+
+# global include and exclude files
+if [ -f $SCRIPTPATH/deploy-include.txt ]; then
+  INCLUDEFROM="--include-from $SCRIPTPATH/deploy-include.txt"
+fi
+if [ -f $SCRIPTPATH/deploy-exclude.txt ]; then
+  EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
+fi
+
+# the actual logged in user
+CURRENTUSER=$(id -u -n)
+
+# the actual logged in user unless changed in config
+LOCALUSER=$CURRENTUSER
+
+# read config file and override default values
 read_config
 
 # Make path and folder names sane. Make sure that dirs have trailing slashes and files haven't.
@@ -326,15 +359,22 @@ fi
 
 USAGE="Usage: deploy <command> [path]
   General commands :
-    config       Output current configuration.
-    diff         Show files and folders in specified path on local that are not on remote or have different size or timestamp
-    diffdb       Not on FTP mode.
-    down         Download the specified path from remote to local
-    downdb       Dump remote db to file, download file and import into local db.
-    dumplocaldb  Dump the local db to local file
-    dumpremotedb Dump the remote db to local file. Not on FTP mode.
-    up           Upload the specified path from local to remote
-    remote       Switch remote.";
+    config       
+      Output configuration for local site and current remote.
+    diff <path>
+      Show files and folders in specified path on local that are not on remote or have different size or timestamp
+    down <path>         
+      Download the specified path from remote to local
+    downdb  
+      Dump remote db to file if necessary and possible, download dump and import into local db.
+    dumplocaldb  
+      Dump the local db to local file.
+    dumpremotedb 
+      Dump the remote db to local file. Not on FTP mode.
+    up <path>
+      Upload the specified path from local to remote
+    remote [<remote>]
+      List remotes or switch remote.";
 
 
 # If no command, show usage
@@ -346,16 +386,16 @@ require_site_root
 #
 # Attempt to determine type of system (CMS).
 #
-if [ -d http/typo3 ]; then
+if [ -d http/typo3conf ]; then
   SYSTEM="typo3"
 fi
 if [ -d http/modules/node ]; then
   SYSTEM="drupal7"
 fi
 
-# include system specific script that reads db creds
-if [ -f $SCRIPTPATH/deploy-db-$SYSTEM ]; then
-  . $SCRIPTPATH/deploy-db-$SYSTEM
+# include system specific pre-script. These can for instance fetch DB credentials.
+if [ -f $SCRIPTPATH/deploy-pre-$SYSTEM ]; then
+  . $SCRIPTPATH/deploy-pre-$SYSTEM
 fi
 
 
@@ -378,76 +418,37 @@ read_pw () {
 }
 
 #
-#
+# Invoke hooks, executing more specific hooks before more general ones, 
+# allowing any hook to prevent execution of the following ones.
 #
 deploy_hook () {
-  # Invoke hooks, executing more specific hooks before more general ones.
-  # This allows any hook to prevent execution of the following (more general) ones, or allow them to execute.  
   EVENT=$1
-  # echo "debug : $EVENT-$SYSTEM-$REMOTEINDEX"
-  
   STOP_PROPAGATION=0
 
-  #
-  # Chain :
-  #   - site down-preprod
-  #   - site down-
-  # 
   # site hooks
-  if [ -f .deploy/hooks/$EVENT-$REMOTEINDEX ]; then
-    . .deploy/hooks/$EVENT-$REMOTEINDEX
+  if [ -f $LOCALROOT/.deploy/hooks/$EVENT-$REMOTEINDEX ]; then
+    . $LOCALROOT/.deploy/hooks/$EVENT-$REMOTEINDEX
   fi
-  if [ -f .deploy/hooks/$EVENT ] && [ $STOP_PROPAGATION -eq 0 ]; then
-    . .deploy/hooks/$EVENT
+  if [ -f $LOCALROOT.deploy/hooks/$EVENT ]; then
+    deploy_log "Invoking hook $EVENT"
+    . $LOCALROOT/.deploy/hooks/$EVENT
   fi
 
   # user hooks
-  if [ -f ~/.deploy/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ $STOP_PROPAGATION -eq 0 ]; then
+  # ex. "downdb-drupal7-prod"
+  if [ -f ~/.deploy/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
     . ~/.deploy/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
-  fi
-  if [ -f ~/.deploy/hooks/$EVENT-$SYSTEM ] && [ $STOP_PROPAGATION -eq 0 ]; then
-    . ~/.deploy/hooks/$EVENT-$SYSTEM
-  fi
-
-  # global hooks
-  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ $STOP_PROPAGATION -eq 0 ]; then
-    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
-  fi
-  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM ] && [ $STOP_PROPAGATION -eq 0 ]; then
-    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM
-  fi
-}
-
-#
-#
-#
-deploy_hook () {
-  # Invoke hooks, executing more specific hooks before more general ones, allowing any hook to prevent execution of the following ones.
-  EVENT=$1
-  STOP_PROPAGATION=0
-
-  # site hooks
-  if [ -f .deploy/hooks/$EVENT-$REMOTEINDEX ]; then
-    . .deploy/hooks/$EVENT-$REMOTEINDEX
-  fi
-  if [ -f .deploy/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
-    . .deploy/hooks/$EVENT
-  fi
-
-  # user hooks
-  if [ -f ~/.deploy/hooks/$EVENT-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
-    . ~/.deploy/hooks/$EVENT-$REMOTEINDEX
   fi
   if [ -f ~/.deploy/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
     . ~/.deploy/hooks/$EVENT
   fi
 
   # global hooks
-  if [ -f $SCRIPTPATH/hooks/$EVENT-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
-    . $SCRIPTPATH/hooks/$EVENT-$REMOTEINDEX
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
   fi
-  if [ -f $SCRIPTPATH/hooks/$EVENT ] && [ ! $STOP_PROPAGATION ]; then
-    . $SCRIPTPATH/hooks/$EVENT
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM ] && [ ! $STOP_PROPAGATION ]; then
+    . $SCRIPTPATH/hooks/$EVENT-$SYSTEM
   fi
 }
 
@@ -475,18 +476,19 @@ deploy_ftp_up () {
 }
 
 deploy_http_down () {
-  local path=$1
-  wget "$REMOTESCRIPTURL&a=down&p=$path" -O .deploy/temp
-  for T in `cat .deploy/temp`; do
+	local path=$1
+	wget "http://$REMOTEURL/deploy/$REMOTEKEY/down.php?a=down&p=$path" -O .deploy/temp
+      
+  for T in `cat .deploy/temp`; do 
     local type=`echo $T | cut -d ";" -f 1`;
     local obj=`echo $T | cut -d ";" -f 2`;
     if [ "$type" = "d" ]; then
       mkdir -p "$path/$obj"
       deploy_http_down "$path/$obj"
-    fi
+    fi    
     if [ "$type" = "f" ]; then
-      wget "$REMOTESCRIPTURL&a=down&p=$path/$obj" -O "$path/$obj"
-    fi
+      wget "http://$REMOTEURL/deploy/$REMOTEKEY/down.php?a=down&p=$path/$obj" -O "$path/$obj"
+    fi    
   done
 }
 
@@ -582,6 +584,7 @@ case "$COMMAND" in
     ;;
  
   "config" )
+    echo "System           : $SYSTEM"
     echo "Local user       : $LOCALUSER"
     echo "Remote host      : $REMOTEHOST"
     echo "Remote user      : $REMOTEUSER"
@@ -640,15 +643,15 @@ case "$COMMAND" in
         if [ -f $LOCALPATH ]
         then
           echo -n "Remote file : "
-          ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT; ls -l $REMOTEPATH"
+          ssh -p$REMOTEPORT $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT; ls -l $REMOTEPATH"
  
           # do an actual diff on two files
-          ssh $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed $DIFFCOLORSED
+          ssh -p$REMOTEPORT $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed $DIFFCOLORSED
         fi
         if [ -d $LOCALPATH ]
         then
           # diff folder structure using rsync dry-run
-          rsync -avnci --delete $INCLUDEFROM $EXCLUDEFROM ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
+          rsync -avnci --delete $INCLUDEFROM $EXCLUDEFROM --rsh="ssh -p$REMOTEPORT" ${2%/}/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED
         fi
       ;;
 
@@ -727,16 +730,17 @@ case "$COMMAND" in
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy down <path>"; exit 1;
     fi
 
+    
     # check if "http/" is owned by the current user. If not, downloading files will probably cause trouble. Confirm.
     HTTPOWNER=$(stat -c %U http)
-    if [ $HTTPOWNER != $(id -u -n) ]; then
-      deploy_confirm_or_exit "You are not $HTTPOWNER.";
+    if [ $HTTPOWNER != $LOCALUSER ]; then
+      deploy_confirm_or_exit "You are not $HTTPOWNER. Any new files downloaded will be owned by $CURRENTUSER";
     fi
 
     deploy_log "Downloading $LOCALPATH ...";
     case "$REMOTETYPE" in
       "local" )
-        if [ -n "$LOCALUSER" ]; then 
+        if [ $LOCALUSER != $CURRENTUSER ]; then 
           su $LOCALUSER -c "rsync -avci $INCLUDEFROM $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH"
         else
           rsync -avci $INCLUDEFROM $EXCLUDEFROM $REMOTEROOT$REMOTEPATH $LOCALPATH | sed $RSYNCCOLORSED        
@@ -745,7 +749,19 @@ case "$COMMAND" in
       "ssh" )
         # download structure or single file using rsync
         # we use --delete when downloading
-        rsync -avi $INCLUDEFROM $EXCLUDEFROM --delete $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
+        if [ $LOCALUSER != $CURRENTUSER ]; then 
+          echo "Switching to $LOCALUSER"
+          su $LOCALUSER -c "rsync -avi $INCLUDEFROM $EXCLUDEFROM --delete --rsh='ssh -p$REMOTEPORT' $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH"
+        else
+          # -r, --recursive recurse into directories
+          # -l, --links copy symlinks as symlinks
+          # -p, --perms preserve permissions
+          # -t, --times preserve modification times
+          # -g, --group preserve group
+          # -o, --owner preserve owner (super-user only)
+          # -D same as --devices --specials
+          rsync -rlptgDvi $INCLUDEFROM $EXCLUDEFROM --delete --rsh="ssh -p$REMOTEPORT" $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
+        fi
         ;;
       "ftp" )
         require_remotepw
@@ -754,11 +770,11 @@ case "$COMMAND" in
         cd ../../..
         rsync -avi $INCLUDEFROM $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         ;;
-
-      "http" )  # VERY experimental ! Not sure how binary safe this is.
+        
+      "http" | "https" )  # VERY experimental ! Not sure how binary safe this is.
         cd .deploy/remote/$REMOTEINDEX 
         deploy_http_down
-        rsync -avi $INCLUDEFROM $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
+   #     rsync -avi $INCLUDEFROM $EXCLUDEFROM .deploy/remote/$REMOTEINDEX/$REMOTEROOT$REMOTEPATH $LOCALPATH
         cd ../../..
       ;;
     esac
@@ -790,12 +806,11 @@ case "$COMMAND" in
    
     
   "dumplocaldb" )
-    # this dump is specifically with diff in mind
-    if [ ! -n "$LOCALDB" ]; then echo "Missing localdb - check .deploy.cnf"; exit 1;
+    if [ -z "$LOCALDB" ]; 
+      then echo "Missing localdb"; exit 1;
     fi
     DUMPPATH=".deploy/dump/local.sql"
     echo "Dumping to $DUMPPATH ..."
-    # --skip-extended-insert makes dump larger, but provides better results with diff later on
     mysqldump --skip-extended-insert $ignoretables -h $LOCALDBHOST -u $LOCALDBUSER -p $LOCALDB > $DUMPPATH
     ;;
 
@@ -804,6 +819,21 @@ case "$COMMAND" in
     remote_dumpdb
     ;;
 
+  #
+  "importremotedb" )
+    local_importremotedb
+  ;;
+  
+	#
+	"invokehook" )
+	  if [ -z "$2" ]; then 
+	    echo "Usage: deploy $1 <hook>"; 
+	    echo "  hook can be post-downdb, pre-down etc."
+	    exit 1; 
+    fi
+    deploy_hook "$2"
+    
+	;;
   # run a sql query on local db
   "sqlq" )
     if [ ! -n "$2" ]; then echo "Usage: deploy sqlq <sql>"; exit 1;
