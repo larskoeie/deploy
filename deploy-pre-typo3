@@ -1,10 +1,10 @@
 #!/bin/sh
-
 if [ -d "http/typo3conf" ]; then 
 	php_code=$(cat <<-'EOF' 
 		error_reporting(E_ERROR);
 		$t3_version = '4.7';
 	
+		define('PATH_typo3conf', getcwd() . '/http/typo3conf/');
 		$conffile = getcwd() . '/http/typo3conf/localconf.php';
 		if (is_file($conffile)) {
 			include($conffile); 
@@ -12,6 +12,7 @@ if [ -d "http/typo3conf" ]; then
 			$db_username = $typo_db_username;
 			$db_password = $typo_db_password;
 			$db_db = $typo_db;	
+
 		} else {
 			$conffile = getcwd() . '/http/typo3conf/LocalConfiguration.php';
 			if (is_file($conffile)) {
@@ -32,9 +33,10 @@ if [ -d "http/typo3conf" ]; then
 		));
 EOF
 )
-	php_cwd=`/usr/bin/php -r "$php_code"`
+	php_cwd=`php -r "$php_code"`
 	
-	CONFIG=$php_cwd
+	CONFIG=`php -r "$php_code"`
+
 	LOCALVERSION=`echo $CONFIG | awk '{split($0,a,";"); print a[1]}'`
 	LOCALDBHOST=`echo $CONFIG | awk '{split($0,a,";"); print a[2]}'`
 	LOCALDBUSER=`echo $CONFIG | awk '{split($0,a,";"); print a[3]}'`

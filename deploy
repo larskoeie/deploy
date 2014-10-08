@@ -357,29 +357,6 @@ if [ -n "$2" ]; then
   fi
 fi
 
-USAGE="Usage: deploy <command> [path]
-  General commands :
-    config       
-      Output configuration for local site and current remote.
-    diff <path>
-      Show files and folders in specified path on local that are not on remote or have different size or timestamp
-    down <path>         
-      Download the specified path from remote to local
-    downdb  
-      Dump remote db to file if necessary and possible, download dump and import into local db.
-    dumplocaldb  
-      Dump the local db to local file.
-    dumpremotedb 
-      Dump the remote db to local file. Not on FTP mode.
-    up <path>
-      Upload the specified path from local to remote
-    remote [<remote>]
-      List remotes or switch remote.";
-
-
-# If no command, show usage
-if [ ! -n "$1" ]; then echo "$USAGE"; exit 1;
-fi
 
 require_site_root
 
@@ -397,7 +374,6 @@ fi
 if [ -f $SCRIPTPATH/deploy-pre-$SYSTEM ]; then
   . $SCRIPTPATH/deploy-pre-$SYSTEM
 fi
-
 
 #
 # Reads a password from prompt. Show *'s
@@ -444,7 +420,7 @@ deploy_hook () {
   fi
 
   # global hooks
-  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then
+  if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX ] && [ ! $STOP_PROPAGATION ]; then 
     . $SCRIPTPATH/hooks/$EVENT-$SYSTEM-$REMOTEINDEX
   fi
   if [ -f $SCRIPTPATH/hooks/$EVENT-$SYSTEM ] && [ ! $STOP_PROPAGATION ]; then
@@ -760,7 +736,7 @@ case "$COMMAND" in
           # -g, --group preserve group
           # -o, --owner preserve owner (super-user only)
           # -D same as --devices --specials
-          rsync -rlptgDvi $INCLUDEFROM $EXCLUDEFROM --delete --rsh="ssh -p$REMOTEPORT" $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
+          rsync -avic $INCLUDEFROM $EXCLUDEFROM --rsh="ssh -p$REMOTEPORT" $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH $LOCALPATH
         fi
         ;;
       "ftp" )
@@ -939,6 +915,30 @@ user $REMOTEUSER $REMOTEPASSWORD
   "log" )
     tail .deploy/log
   ;;
+  
+  * )
+  
+  echo "Usage: deploy <command> [path]
+  General commands :
+    config       
+      Output configuration for local site and current remote.
+    diff <path>
+      Show files and folders in specified path on local that are not on remote or have different size or timestamp
+    down <path>         
+      Download the specified path from remote to local
+    downdb  
+      Dump remote db to file if necessary and possible, download dump and import into local db.
+    dumplocaldb  
+      Dump the local db to local file.
+    dumpremotedb 
+      Dump the remote db to local file. Not on FTP mode.
+    up <path>
+      Upload the specified path from local to remote
+    remote [<remote>]
+      List remotes or switch remote.";
+  ;;
+
+
 esac
 
 if [ -f .deploy/temp.sql ]; then rm .deploy/temp.sql;

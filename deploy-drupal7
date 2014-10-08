@@ -1,0 +1,98 @@
+#!/bin/sh
+#
+#
+
+
+local_clear_cache() {
+	echo "Clearing cache ..."
+}
+
+case "$1" in 
+	"cc" )
+		local_clear_cache
+		;;
+
+	"diff" )
+	  #if [ ! -z $LOCALPATH ]; then
+    #  rsync -avnci --include=*.info --exclude=*.* $LOCALPATH/ $REMOTEUSER@$REMOTEHOST:$REMOTEROOT$REMOTEPATH | sed $RSYNCCOLORSED | sed "s/^\.d.*//g"
+	  #fi
+    #exit;	  
+	;;
+
+	"rdrush" )
+	  deploy_confirm "You are invoking drush on remote site."
+	  ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH$REMOTEHTTPFOLDER; drush $2 $3 $4 $5"
+	;;
+	
+	"ssh" )
+	  ssh $REMOTEUSER@$REMOTEHOST "$2 $3 $4 $5"
+	;;
+	
+	"users-disable-except" )
+		if [ ISDRUPAL7 ]; then				
+			username=$2
+			if [ ! -n "$username" ]; then echo "Usage : deploy users-disable-except <except-username>"; exit 1;
+			fi
+			
+			echo "update users set status=0 where name != '$username';" > deploy-temp.sql
+			
+		fi
+		if [ -f deploy-temp.sql ]; then
+			mysql -h $LOCALDBHOST -u $LOCALDBUSER -p$LOCALDBPASSWORD $LOCALDB < deploy-temp.sql
+			echo "All users except '$username' disabled."
+			handled=1;
+	
+		fi
+	;;
+	
+	#
+	# Show all permissions that role 1 has, but role 2 has not.
+	#
+	"diff-permissions" )
+		rid1="$2"
+		rid2="$3"
+  	if [ -z "$rid2" ]; then echo "Usage : deploy diff-permissions <rid1> <rid2>"; exit 1;
+		fi
+			  
+	  sqlq "select rid, name from role where rid in ($rid1, $rid2)"
+	  sqlq "SELECT p1.rid, p1.permission 
+	  FROM role_permission as p1 left join role_permission as p2 on p1.permission=p2.permission and p1.rid=$rid1 and p2.rid=$rid2 
+	  where p1.rid =$rid1 and p2.rid is null"
+	;;
+
+  "dis" )
+    sqlq "update system set status=0 where name='$2'";
+  ;;
+  
+  "watchdog-tail" )
+    while true
+    do
+      clear      
+      q=`sqlq "select type, message, variables, severity, link, location, timestamp from watchdog order by timestamp desc limit 15" `
+			php_code=$(cat <<-'EOF' 
+		$e=array_reverse(explode("\n", $argv[1]));
+		
+		array_pop($e);
+		foreach ($e as $i) {
+		  list($type, $message, $variables, $severity, $link, $location, $timestamp) = explode("\t", $i);	
+		  $variables = unserialize($variables);
+		  #print_r($variables);
+		  if (is_array($variables))
+		  	print implode("\n    ", array(
+		  	  strftime('%d.%m.%Y %H.%M', $timestamp) . ' : ' . $type,
+		  		substr(str_replace(array_keys($variables), $variables, $message), 0, 100),
+		  	  $location,
+		  	)) . "\n";
+		}
+		EOF
+		)
+	php_cwd=`/usr/bin/php -r "$php_code" "$q"`
+
+      echo "$php_cwd"
+      sleep 1
+    done
+    
+  ;;
+esac
+
+

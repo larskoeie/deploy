@@ -1,10 +1,10 @@
 deprecation*.log
-fileadmin
 t3lib/*
 typo3/*
 typo3_src/*
 typo3conf/*.log
 typo3conf/database*.php
+localconf_local.php
 typo3conf/ENABLE_INSTALL_TOOL
 typo3conf/temp_CACHED*.php
 typo3temp/*
