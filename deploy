@@ -210,6 +210,7 @@ remote_downloaddbdump () {
     ;;
   esac
 
+  deploy_log "Unpacking ..."
   cd $DUMPPATH
   for f in `ls *.gz`; do
     gunzip -f $f
@@ -243,7 +244,7 @@ local_importremotedb () {
   DUMPPATH=".deploy/dump/$REMOTEINDEX/"
   for f in `ls $DUMPPATH`; do
     echo "File -> $f"
-    size=`stat -c%s $f`
+    size=`stat -c%s $DUMPPATH/$f`
     echo "Importing file $f ($size bytes) ..."
     # remove "create database" and "use" as we want to control database name from outside
     # there is a (at least theoretical) risc that this can remove something that is not a sql "CREATE DATABASE" or "USE" statement.
