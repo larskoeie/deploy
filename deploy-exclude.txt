@@ -4,7 +4,6 @@
 */.git/*
 **/.git/*
 .gitignore
-.htaccess
 */.htaccess
 */robots.txt
 .svn/

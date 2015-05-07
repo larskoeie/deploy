@@ -299,9 +299,11 @@ LOCALSITENAME=`basename $LOCALROOT`
 TIME=`date +"%y%m%d"`
 
 # sed substitution commands for coloring output from diff and rsync
-DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+# background DIFFCOLORSED='s/^-/\x1b[41m-/;s/^+/\x1b[44m+/;s/$/\x1b[0m/'
+DIFFCOLORSED='s/^-/\x1b[32m-/;s/^+/\x1b[33m+/;s/$/\x1b[0m/'
 # the last part removes lines with only "p" (for different permissions)
-RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g;s/cd/\x1b[44m&/g;s/\*/\x1b[41m&/g;/\..\.\.\.p\.\.\.\.\..*$/d"
+# background RSYNCCOLORSED="s/<f/\x1b[44m&/g;s/>f/\x1b[44m&/g;s/$/\x1b[0m/g;s/cd/\x1b[44m&/g;s/\*/\x1b[41m&/g;/\..\.\.\.p\.\.\.\.\..*$/d"
+RSYNCCOLORSED="s/<f/\x1b[33m&/g;s/>f/\x1b[33m&/g;s/$/\x1b[0m/g;s/cd/\x1b[33m&/g;s/\*/\x1b[32m&/g;/\..\.\.\.p\.\.\.\.\..*$/d"
 
 # global include and exclude files
 if [ -f $SCRIPTPATH/deploy-include.txt ]; then
