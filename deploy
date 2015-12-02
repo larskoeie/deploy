@@ -4,18 +4,9 @@
 
 #
 # Reads state variables. 
-# Reads config file (.deploy.cnf) and apply values to global variables for later use.
+# Reads config file (.deploy/config) and apply values to global variables for later use.
 #
 read_config () {
-	# --- for backwards compatibility
-  if [ -f .deploy.cnf ]; then
-    mv .deploy.cnf .deploy/config
-  fi
-  if [ -f .deploy.state ]; then
-    mv .deploy.state .deploy/state
-  fi
-  # --- 
-  
   REMOTEINDEX=""
   if [ -f .deploy/state ]; then
     f=`cat .deploy/state | cut -d = -f 1`
@@ -307,10 +298,10 @@ RSYNCCOLORSED="s/<f/\x1b[33m&/g;s/>f/\x1b[33m&/g;s/$/\x1b[0m/g;s/cd/\x1b[33m&/g;
 
 # global include and exclude files
 if [ -f $SCRIPTPATH/deploy-include.txt ]; then
-  INCLUDEFROM="--include-from $SCRIPTPATH/deploy-include.txt"
+  INCLUDEFROM="$INCLUDEFROM --include-from $SCRIPTPATH/deploy-include.txt"
 fi
 if [ -f $SCRIPTPATH/deploy-exclude.txt ]; then
-  EXCLUDEFROM="--exclude-from $SCRIPTPATH/deploy-exclude.txt"
+  EXCLUDEFROM="$INCLUDEFROM --exclude-from $SCRIPTPATH/deploy-exclude.txt"
 fi
 
 # the actual logged in user
@@ -601,7 +592,11 @@ case "$COMMAND" in
     if [ ! -n "$LOCALPATH" ]; then echo "Usage: deploy diff <path>"; exit 1; 
     fi
 
-    if [ -f $LOCALPATH ]; then echo -n "Local file  : "; ls -l $LOCALPATH
+    if [ -f $LOCALPATH ]; then
+        # @TODO : this is not portable - Linux only !
+        hash=`md5sum $LOCALPATH | cut -d " " -f 1`
+        echo -n "Local file  : $hash ";
+        ls -l $LOCALPATH
     fi
 
     echo "Blue lines are local - red are remote"
@@ -622,7 +617,8 @@ case "$COMMAND" in
         if [ -f $LOCALPATH ]
         then
           echo -n "Remote file : "
-          ssh -p$REMOTEPORT $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT; ls -l $REMOTEPATH"
+          # @TODO : this is not portable - FreeBSD only !
+          ssh -p$REMOTEPORT $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT; md5 $REMOTEPATH | cut -d ' ' -f 4; ls -l $REMOTEPATH"
  
           # do an actual diff on two files
           ssh -p$REMOTEPORT $REMOTEUSER@$REMOTEHOST "cat $REMOTEROOT$REMOTEPATH" | diff -w -u - "$LOCALPATH" | sed $DIFFCOLORSED
@@ -918,7 +914,148 @@ user $REMOTEUSER $REMOTEPASSWORD
   "log" )
     tail .deploy/log
   ;;
-  
+
+  #
+  # git log on remote
+  # only argument is path to repo
+  #
+  "gitlog" )
+    case $REMOTETYPE in
+      "ssh" )
+        ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH; git log --pretty='format:%h: %s (%an, %ar)' -10"
+        echo;
+      ;;
+    esac
+  ;;
+
+  #
+  # git diff remote repo HEAD vs. local repo HEAD
+  # only argument is path to repo
+  #
+  "gitdiff" )
+    case $REMOTETYPE in
+      "ssh" )
+        cd $LOCALPATH;
+        localsha=`git rev-parse HEAD`;
+        remotesha=`ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH; git log --pretty='format:%H' -1"`;
+        echo "Local  : $localsha"
+        echo "Remote : $remotesha"
+        git diff $remotesha HEAD
+        echo;
+      ;;
+    esac
+  ;;
+
+
+  #
+  # Do "git submodule" on local and remote and diff the results
+  "gitsubmodule-diff" )
+    case $REMOTETYPE in
+      "ssh" )
+        cd $LOCALPATH;
+        remotesubs=`ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH; git submodule"`;
+        echo $remotesubs
+        git submodule
+        echo;
+      ;;
+    esac
+  ;;
+
+  "foreach-git" )
+    SUBCOMMAND=$3
+    case $REMOTETYPE in
+      "ssh" )
+        for r in `find $LOCALROOT/$LOCALPATH -maxdepth 1 -type d | sort`; do
+          cd $r;
+          repo=`basename $r`
+          case $SUBCOMMAND in
+            "describe" )
+              GITCOMMAND="git describe --always --dirty"
+              localdata=$($GITCOMMAND)
+              remotedata=$(ssh $REMOTEUSER@$REMOTEHOST "if [ -d $REMOTEROOT$REMOTEPATH$repo ]; then cd $REMOTEROOT$REMOTEPATH$repo; $GITCOMMAND; fi");
+          esac
+          if [ "$localdata" != "$remotedata" ]; then
+            echo "$repo"
+            if [ -n "$remotedata" ]; then
+              echo "  local  : $localdata";
+              echo "  remote : $remotedata";
+            else
+              echo "  not existing on remote";
+            fi
+          fi
+        done
+
+      ;;
+    esac
+  ;;
+
+
+  #
+  # Do "git log -1 --oneline" on local and remote and diff the results
+  #
+  "foreach-dir-git-head-diff" )
+    case $REMOTETYPE in
+      "ssh" )
+        for r in `find $LOCALROOT/$LOCALPATH -maxdepth 1 -type d | sort`; do
+          cd $r;
+          repo=`basename $r`
+          sha=`git log --pretty="format:%H - %ar" -1`
+          localstring="$localstring$repo - $sha\n"
+        done
+        echo $localstring > $LOCALROOT/.deploy/temp1;
+
+        remotecmd='
+        for r in `find '$REMOTEROOT'/'$REMOTEPATH' -maxdepth 1 -type d | sort`; do
+          cd $r;
+          repo=`basename $r`
+          sha=`git log --pretty="format:%H - %ar" -1`
+          string="$string$repo - $sha\n"
+        done
+
+        echo $string;
+        '
+        remotestring=`ssh $REMOTEUSER@$REMOTEHOST "$remotecmd"`
+        echo $remotestring > $LOCALROOT/.deploy/temp2
+
+        echo "<- local      remote ->"
+        diff -w -y -W 200 --suppress-common-lines $LOCALROOT/.deploy/temp1 $LOCALROOT/.deploy/temp2
+
+      ;;
+    esac
+  ;;
+
+  #
+  # Do "git log -1 --oneline" on local and remote and diff the results
+  #
+  "foreach-dir-git-head" )
+    case $REMOTETYPE in
+      "ssh" )
+        for r in `find $LOCALROOT/$LOCALPATH -maxdepth 1 -type d | sort`; do
+          cd $r;
+          repo=`basename $r`
+          localsha=`git log --pretty="format:%h" -1`
+          remotesha=`ssh $REMOTEUSER@$REMOTEHOST "if [ -d $REMOTEROOT$REMOTEPATH$repo ]; then cd $REMOTEROOT$REMOTEPATH$repo; git log --pretty='format:%h' -1; fi"`;
+
+          if [ "$localsha" != "$remotesha" ]; then
+            echo "$repo"
+            if [ -n "$remotesha" ]; then
+              localdate=`git log --pretty='format:%ar' -1`
+              remotedate=`ssh $REMOTEUSER@$REMOTEHOST "cd $REMOTEROOT$REMOTEPATH$repo; git log --pretty='format:%ar' -1"`;
+              echo "  $localsha ($localdate) - $remotesha ($remotedate)"
+
+            else
+              echo "  not existing on remote";
+            fi
+          fi
+        done
+
+        echo "<- local      remote ->"
+
+      ;;
+    esac
+  ;;
+
+
   * )
   
   echo "Usage: deploy <command> [path]
@@ -938,7 +1075,14 @@ user $REMOTEUSER $REMOTEPASSWORD
     up <path>
       Upload the specified path from local to remote
     remote [<remote>]
-      List remotes or switch remote.";
+      List remotes or switch remote.
+
+  Git related :
+    gitdiff <path-to-repo>
+      Make a git diff between local HEAD and remote HEAD
+    gitlog <path-to-repo>
+      Make a git log on remote
+      ";
   ;;
 
 
